@@ -3,6 +3,7 @@ import { ReportsView, ReportDetail, pendingForMe } from './plan.js';
 import { loadExtra, runRecurrences, calShift, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
 import { loadMore, applyTheme, Notifications, MySettings, FromText } from './more.js';
 import { driveReturn } from './files.js';
+import { registerDevice } from './native.js';
 import { Login, NoProfile, Home, Tasks, TaskForm, TaskDetail, Approvals, Soon, More, Trash, needsMe } from './views.js';
 
 const app = document.getElementById('app');
@@ -103,6 +104,7 @@ async function start(session) {
   try { await loadBase(); if (S.me) { await Promise.all([loadAll(), loadExtra(), loadMore()]); await runRecurrences(); } }
   catch (e) { toast('Ma\'lumotni yuklab bo\'lmadi. Internetni tekshiring.'); }
   ready = true; render();
+  if (S.me) registerDevice();
   if (S.me && !channel) {
     let timer;
     const refresh = () => { clearTimeout(timer); timer = setTimeout(async () => { await Promise.all([loadAll(), loadExtra(), loadMore()]); if (!busy()) render(); }, 400); };

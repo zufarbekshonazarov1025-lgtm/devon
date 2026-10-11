@@ -1,6 +1,7 @@
 import { sb, S, bus, h, icon, toast, ask, confirmBox, today, fmtDate, fmtDateTime, dayOf, daysLeft, longToday, greeting,
   celebrate, STATUS, isOpen, priority, dueChip, onTime, onTimeStats, nameOf, other, profile, loadTasks, updateTask, notify, go, Head, BackHead, Empty, owner } from './core.js';
 import { Files } from './files.js';
+import { unregisterDevice } from './native.js';
 import { Bell, HomeKudos, StreakChip, KudosBlock, downloadExcel } from './more.js';
 import { HomePlan, RequestCard, pendingForMe, mySentRequests, askDecision, askReschedule, SentCard } from './plan.js';
 
@@ -397,7 +398,7 @@ export function More() {
     h('div', { class: 'list' },
       row('Mening sozlamalarim', 'Rang, tungi rejim, tinch soatlar', () => go('#/sozlamalar')),
       S.me.is_admin && row('Admin panel', 'Muhimlik, vaqtlar, maqsadlar, foydalanuvchilar', () => go('#/admin'))),
-    h('button', { class: 'btn danger', onclick: async () => { if (await confirmBox({ title: 'Hisobdan chiqilsinmi?', ok: 'Chiqish' })) sb.auth.signOut(); } }, 'Hisobdan chiqish'));
+    h('button', { class: 'btn danger', onclick: async () => { if (await confirmBox({ title: 'Hisobdan chiqilsinmi?', ok: 'Chiqish' })) { await unregisterDevice(); } else return; sb.auth.signOut(); } }, 'Hisobdan chiqish'));
 }
 
 // ---------- Savat ----------

@@ -5,10 +5,14 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -147,7 +151,37 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        if (state != null) web.restoreState(state); else web.loadUrl(HOME);
+        web.addJavascriptInterface(new Bridge(), "DevonNative");
+        Sync.ensureChannel(this);
+        Sync.schedule(this);
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 7);
+
+        String route = getIntent() != null ? getIntent().getStringExtra("route") : null;
+        if (state != null && route == null) web.restoreState(state); else web.loadUrl(HOME + (route != null ? route : ""));
+    }
+
+    /** Bildirishnoma yoki vidjet bosilganda kerakli sahifani ochadi. */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        String route = intent.getStringExtra("route");
+        if (route != null && route.matches("#/[A-Za-z0-9/_-]*")) web.evaluateJavascript("location.hash='" + route + "'", null);
+    }
+
+    /** Dastur sahifasi chaqiradigan amallar. Faqat o'z saytimiz ichkarida ochiladi, begona sahifa bunga yeta olmaydi. */
+    private final class Bridge {
+        @JavascriptInterface public String deviceKey() { return Store.key(MainActivity.this); }
+
+        @JavascriptInterface public String deviceName() { return Build.MANUFACTURER + " " + Build.MODEL; }
+
+        @JavascriptInterface public void registered() { Store.setRegistered(MainActivity.this, true); Sync.now(MainActivity.this); }
+
+        @JavascriptInterface public void signedOut() { Store.clear(MainActivity.this); PlanWidget.refresh(MainActivity.this); }
+
+        @JavascriptInterface public void sync() { if (Store.registered(MainActivity.this)) Sync.now(MainActivity.this); }
+
+        @JavascriptInterface public int version() { return 2; }
     }
 
     private void openOutside(Uri uri) {
@@ -189,7 +223,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() { super.onResume(); web.onResume(); }
 
     @Override
-    protected void onPause() { web.onPause(); super.onPause(); }
+    protected void onPause() { web.onPause(); if (Store.registered(this)) Sync.now(this); super.onPause(); }
 
     @Override
     protected void onDestroy() { if (web != null) web.destroy(); super.onDestroy(); }

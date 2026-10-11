@@ -1,6 +1,6 @@
 import { TaskCard } from './views.js';
 import { DriveCard } from './files.js';
-import { sb, S, bus, h, icon, toast, confirmBox, today, iso, fmtDate, isOpen, nameOf, go, Head, BackHead, Empty,
+import { sb, S, bus, h, icon, toast, confirmBox, today, iso, fmtDate, fmtDateTime, isOpen, nameOf, go, Head, BackHead, Empty,
   addDays, mondayOf, monthStart, monthEnd, fmtDay, monthName, loadTasks, loadBase, ping } from './core.js';
 
 S.events = []; S.reminders = []; S.recs = [];
@@ -316,6 +316,24 @@ export function Recurrences() {
     h('button', { class: 'btn', type: 'button', onclick: () => recForm(null) }, '+ Takror qo\'shish'));
 }
 
+// ---------- Qurilmalar (admin) ----------
+function Devices() {
+  const box = h('div', { class: 'list' }, h('div', { class: 't-meta', style: 'padding:14px 16px' }, 'Yuklanmoqda…'));
+  const load = async () => {
+    const { data } = await sb.from('devices').select('id,user_id,name,last_seen,revoked,created_at').order('created_at', { ascending: false });
+    const rows = (data || []).filter((d) => !d.revoked);
+    box.replaceChildren(...(rows.length ? rows.map((d) => h('div', { style: 'min-height:60px;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid var(--soft)' },
+      h('span', { style: 'min-width:0' }, h('b', {}, d.name || 'Telefon'), h('small', {}, `${nameOf(d.user_id, true)} · ${d.last_seen ? 'oxirgi aloqa ' + fmtDateTime(d.last_seen) : 'hali ulanmagan'}`)),
+      h('button', { class: 'btn danger small', type: 'button', onclick: async () => {
+        if (!await confirmBox({ title: 'Qurilma uzilsinmi?', text: 'Bu telefonga bildirishnoma kelmaydi va vidjet tozalanadi. Ilovaga qayta kirilsa, yana ulanadi.', ok: 'Uzish' })) return;
+        const { error } = await sb.from('devices').update({ revoked: true }).eq('id', d.id);
+        if (error) { toast('Uzib bo\'lmadi'); return; } load();
+      } }, 'Uzish'))) : [h('div', { class: 't-meta', style: 'padding:14px 16px' }, 'Ulangan telefon yo\'q. Devon ilovasi o\'rnatilib, hisobga kirilganda shu yerda ko\'rinadi.')]));
+  };
+  load();
+  return [h('div', { class: 'section' }, h('h2', {}, 'Qurilmalar')), box];
+}
+
 // ---------- Admin panel ----------
 export function Admin() {
   if (!S.me.is_admin) return h('main', { class: 'view' }, BackHead('Admin panel', '#/yana'), Empty('Ruxsat yo\'q', 'Bu bo\'lim faqat admin uchun.'));
@@ -375,6 +393,7 @@ export function Admin() {
     err,
     h('button', { class: 'btn', type: 'button', onclick: save }, 'Sozlamalarni saqlash'),
     DriveCard(),
+    Devices(),
     h('div', { class: 'section' }, h('h2', {}, 'Foydalanuvchilar')),
     h('div', { class: 'list' }, S.profiles.map((p) => h('button', { type: 'button', onclick: () => rename(p) },
       h('span', {}, h('b', {}, p.full_name), h('small', {}, `${p.kind === 'rahbar' ? 'Rahbar' : 'Yordamchi'}${p.is_admin ? ' · admin' : ''} · ko'rinishi: ${p.short_name}`)), icon('next', 18, '#56645F')))),
