@@ -16,7 +16,18 @@ export function TaskCard(t) {
     h('div', { class: 't-title' }, t.title),
     h('div', { class: 't-meta' },
       `${nameOf(t.creator_id, true)} → ${nameOf(t.assignee_id, true)} · ${STATUS[t.status]} · muddat ${fmtDate(t.due_date)}`,
-      t.is_private ? ' · shaxsiy' : ''));
+      t.is_private ? ' · shaxsiy' : ''),
+    isOpen(t) && t.waiting_on && S.contacts.find((c) => c.id === t.waiting_on)
+      ? h('div', { class: 't-meta', style: 'font-weight:700;color:var(--amber)' }, `Kutilmoqda: ${S.contacts.find((c) => c.id === t.waiting_on).name}`) : null);
+}
+/** «Kutilmoqda» holatiga o'tkazishda kimdan kutilayotgani so'raladi. */
+async function setWaiting(t) {
+  const cur = (S.contacts.find((c) => c.id === t.waiting_on) || {}).name || '';
+  const name = await ask({ title: 'Kimdan kutilmoqda?', label: 'Ism (masalan: Jamshidbek)', value: cur, ok: 'Saqlash' });
+  if (name == null) return;
+  let c = S.contacts.find((x) => x.name.toLowerCase() === name.trim().toLowerCase());
+  if (!c) { const { data, error } = await sb.from('contacts').insert({ name: name.trim(), created_by: S.me.id }).select().single(); if (error) { toast('Saqlab bo\'lmadi'); return; } c = data; S.contacts.push(c); }
+  updateTask(t.id, { status: 'kutilmoqda', waiting_on: c.id }, `Kutilmoqda: ${c.name}`);
 }
 
 /** Mendan javob kutayotgan ishlar. */
@@ -258,7 +269,8 @@ export function TaskDetail(id) {
   const actions = [];
   if (isOpen(t) && mineToDo && !t.accepted_at && !iGave) actions.push(h('button', { class: 'btn', onclick: () => acceptTask(t) }, 'Qabul qildim'));
   if (mineToDo && ['yangi', 'kutilmoqda'].includes(t.status)) actions.push(h('button', { class: 'btn ghost', onclick: () => updateTask(t.id, { status: 'jarayonda', accepted_at: t.accepted_at || new Date().toISOString() }, 'Jarayonda') }, 'Boshlash'));
-  if (mineToDo && ['yangi', 'jarayonda'].includes(t.status)) actions.push(h('button', { class: 'btn ghost', onclick: () => updateTask(t.id, { status: 'kutilmoqda' }, 'Kutilmoqda') }, 'Kutilmoqda'));
+  if (mineToDo && ['yangi', 'jarayonda'].includes(t.status)) actions.push(h('button', { class: 'btn ghost', onclick: () => setWaiting(t) }, 'Kutilmoqda'));
+  if (mineToDo && t.status === 'kutilmoqda') actions.push(h('button', { class: 'btn ghost', onclick: () => setWaiting(t) }, 'Kimdan kutilayotganini o\'zgartirish'));
   if (mineToDo && ['yangi', 'jarayonda', 'kutilmoqda'].includes(t.status)) actions.push(h('button', { class: 'btn', onclick: () => submitTask(t) }, 'Bajarildi'));
   if (t.status === 'tekshiruvda' && iGave && !mineToDo) actions.push(h('button', { class: 'btn', onclick: () => acceptResult(t) }, 'Qabul qilish'), h('button', { class: 'btn ghost', onclick: () => returnTask(t) }, 'Qaytarish'));
 
