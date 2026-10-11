@@ -90,6 +90,7 @@ export function Files(t) {
 /** Admin paneldagi Google Drive kartochkasi. */
 export function DriveCard() {
   const d = S.settings.drive || {};
+  const z = S.settings.zaxira || {};
   const connect = async (e) => {
     e.target.disabled = true;
     const r = await call({ action: 'start' });
@@ -102,6 +103,16 @@ export function DriveCard() {
         ? [h('div', { class: 'between' }, h('b', {}, 'Ulangan'), h('span', { class: 'chip green' }, d.email || 'Drive')),
           h('div', { class: 't-meta' }, 'Biriktirilgan fayllar shu hisobning «Devon fayllari» papkasiga tushadi. Dastur faqat o\'zi yaratgan fayllarni ko\'radi, Drive\'dagi boshqa fayllaringizga kira olmaydi.'),
           d.folder_url && h('a', { href: d.folder_url, target: '_blank', rel: 'noopener', class: 'btn ghost' }, 'Papkani ochish'),
+          h('div', { class: 'between', style: 'border-top:1px solid var(--soft);padding-top:10px' }, h('b', {}, 'Zaxira nusxa'), h('span', { class: 't-meta' }, z.at ? fmtDateTime(z.at) : 'hali olinmagan')),
+          h('div', { class: 't-meta' }, 'Har kuni soat 23:00 da hamma ma\'lumot Excel fayl bo\'lib «Zaxira nusxalar» papkasiga tushadi. Oxirgi 90 kunlik fayllar saqlanadi, eskilari Drive savatiga o\'tadi.'),
+          h('div', { class: 'row' },
+            z.folder_url && h('a', { href: z.folder_url, target: '_blank', rel: 'noopener', class: 'btn ghost small' }, 'Zaxiralarni ochish'),
+            h('button', { class: 'btn ghost small', type: 'button', onclick: async (e) => {
+              e.target.disabled = true; e.target.textContent = 'Olinmoqda…';
+              const r = await call({ action: 'backup' });
+              if (r.err) { toast(r.err); e.target.disabled = false; e.target.textContent = 'Hozir zaxiralash'; return; }
+              await loadBase(); toast('Zaxira nusxa olindi'); bus.render();
+            } }, 'Hozir zaxiralash')),
           h('button', { class: 'btn danger small', type: 'button', onclick: async () => {
             if (!await confirmBox({ title: 'Drive uzilsinmi?', text: 'Yuklangan fayllar Drive\'da qoladi, lekin yangi fayl biriktirib bo\'lmaydi.', ok: 'Uzish' })) return;
             const r = await call({ action: 'disconnect' }); if (r.err) { toast(r.err); return; }
