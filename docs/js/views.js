@@ -80,9 +80,9 @@ export function Home() {
   const motto = typeof S.settings.shior === 'string' ? S.settings.shior : '';
 
   const tiles = me.kind === 'rahbar'
-    ? [[S.tasks.length, 'Jami', ''], [done.length, 'Bajarildi', 'c-brand'], [open.length, 'Ochiq', ''], [pct, 'Vaqtida', 'c-brand']]
-    : [[mine.length, 'Ochiq', ''], [mine.filter((t) => priority(t)?.key === 'muhim').length, 'Muhim!', 'c-red'],
-       [S.tasks.filter((t) => t.status === 'tekshiruvda' && t.assignee_id === me.id).length, 'Javob kutadi', 'c-amber'], [pct, 'Vaqtida', 'c-brand']];
+    ? [[S.tasks.length, 'Jami', '', 'all', 'all'], [done.length, 'Bajarildi', 'c-brand', 'done', 'all'], [open.length, 'Ochiq', '', 'open', 'all'], [pct, 'Vaqtida', 'c-brand', 'ontime', 'all']]
+    : [[mine.length, 'Ochiq', '', 'open', 'me'], [mine.filter((t) => priority(t)?.key === 'muhim').length, 'Muhim!', 'c-red', 'muhim', 'me'],
+       [S.tasks.filter((t) => t.status === 'tekshiruvda' && t.assignee_id === me.id).length, 'Javob kutadi', 'c-amber', 'review', 'me'], [pct, 'Vaqtida', 'c-brand', 'ontime', 'me']];
 
   // Shu kunga tegishli hamma ish bajarilgan bo'lsa
   const dueToday = S.tasks.filter((t) => t.assignee_id === me.id && t.due_date === today() && t.status !== 'bekor');
@@ -105,7 +105,8 @@ export function Home() {
     Head(`${d.week} · ${greeting()}, ${me.short_name}`, d.day,
       h('button', { class: 'iconbtn', 'aria-label': 'Qidiruv', onclick: () => go('#/ishlar') }, icon('search', 20))),
     motto && h('div', { class: 'motto' }, motto),
-    h('div', { class: 'tiles' }, tiles.map(([n, l, c]) => h('div', { class: 'tile' }, h('b', { class: c }, n), h('span', {}, l)))),
+    h('div', { class: 'tiles' }, tiles.map(([n, l, c, show, who]) => h('button', { class: 'tile', type: 'button', 'aria-label': `${l}: ${n}. Ro'yxatni ochish`,
+      onclick: () => { F.show = show; F.who = who; F.q = ''; go('#/ishlar'); } }, h('b', { class: c }, n), h('span', {}, l)))),
     barokat && h('div', { class: 'banner' }, 'Barokatli kun bo\'ldi'),
     me.kind === 'rahbar' ? [waitingBlock, theirsBlock, mineBlock] : [waitingBlock, mineBlock, theirsBlock],
     h('a', { class: 'fab', href: '#/ishlar/yangi', 'aria-label': 'Yangi topshiriq' }, icon('plus', 24, '#fff', 2.5)));
@@ -155,27 +156,41 @@ async function returnTask(t) {
 
 // ---------- Ishlar ro'yxati ----------
 const F = { who: 'all', show: 'open', q: '' };
+const VIEWS = {
+  open: { title: 'Ishlar', sub: 'Ochiq, muddati yaqini tepada', test: (t) => isOpen(t) },
+  all: { title: 'Jami', sub: 'Hamma topshiriqlar', test: () => true },
+  done: { title: 'Bajarildi', sub: 'Bajarilgan topshiriqlar', test: (t) => t.status === 'bajarildi' },
+  ontime: { title: 'Vaqtida', sub: 'Vaqtida bajarilganlar', test: (t) => t.status === 'bajarildi' && onTime(t) === true },
+  late: { title: 'Kechikib', sub: 'Kechikib bajarilganlar', test: (t) => t.status === 'bajarildi' && onTime(t) === false },
+  muhim: { title: 'Muhim!', sub: 'Muddati 3 kungacha yoki o\'tgan', test: (t) => priority(t)?.key === 'muhim' },
+  review: { title: 'Tekshiruvda', sub: 'Javob kutayotganlar', test: (t) => t.status === 'tekshiruvda' },
+  closed: { title: 'Tarix', sub: 'Yopilgan topshiriqlar', test: (t) => !isOpen(t) },
+};
 export function Tasks() {
   const ot = other(), me = S.me.id;
   const q = F.q.trim().toLowerCase();
-  let rows = S.tasks.filter((t) => (F.show === 'open' ? isOpen(t) : !isOpen(t)));
+  const V = VIEWS[F.show] || VIEWS.open;
+  let rows = S.tasks.filter(V.test);
   if (F.who === 'me') rows = rows.filter((t) => t.assignee_id === me);
   if (F.who === 'ot' && ot) rows = rows.filter((t) => t.assignee_id === ot.id);
   if (F.who === 'wait') rows = rows.filter((t) => t.status === 'kutilmoqda' || t.status === 'tekshiruvda');
   if (q) rows = rows.filter((t) => [t.title, t.description, t.result, t.purpose].some((x) => (x || '').toLowerCase().includes(q)));
-  rows = F.show === 'open' ? rows.sort(byDue) : rows.sort((a, b) => (b.closed_at || b.updated_at).localeCompare(a.closed_at || a.updated_at));
+  const byClosed = (a, b) => (b.closed_at || b.updated_at).localeCompare(a.closed_at || a.updated_at);
+  rows.sort((a, b) => (isOpen(a) !== isOpen(b) ? (isOpen(a) ? -1 : 1) : isOpen(a) ? byDue(a, b) : byClosed(a, b)));
 
   const chip = (key, val, label) => h('button', { class: 'fchip' + (F[key] === val ? ' on' : ''), type: 'button', 'aria-pressed': String(F[key] === val), onclick: () => { F[key] = val; bus.render(); } }, label);
   const input = h('input', { type: 'search', placeholder: 'Qidirish', 'aria-label': 'Topshiriq qidirish', value: F.q,
     oninput: (e) => { F.q = e.target.value; clearTimeout(input._t); input._t = setTimeout(() => { bus.render(); const el = document.querySelector('.search input'); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 250); } });
 
   return h('main', { class: 'view' },
-    Head(F.show === 'open' ? 'Muddati yaqini tepada' : 'Yopilgan topshiriqlar', F.show === 'open' ? 'Ishlar' : 'Tarix',
+    Head(`${V.sub} · ${rows.length} ta`, V.title,
       h('a', { class: 'btn pill small', href: '#/ishlar/yangi' }, '+ Yangi')),
     h('label', { class: 'search' }, icon('search', 18, '#56645F'), input),
     h('div', { class: 'filters' },
       chip('who', 'all', 'Hammasi'), chip('who', 'me', 'Menga'), ot && chip('who', 'ot', nameOf(ot.id, true) + 'ga'), chip('who', 'wait', 'Kutilmoqda'),
-      chip('show', F.show === 'open' ? 'closed' : 'open', F.show === 'open' ? 'Tarix' : 'Ochiq ishlar')),
+      h('span', { 'aria-hidden': 'true', style: 'flex:none;width:1px;background:var(--line);margin:8px 2px' }),
+      chip('show', 'open', 'Ochiq'), chip('show', 'all', 'Jami'), chip('show', 'done', 'Bajarildi'), chip('show', 'ontime', 'Vaqtida'),
+      chip('show', 'late', 'Kechikib'), chip('show', 'muhim', 'Muhim!'), chip('show', 'review', 'Tekshiruvda'), chip('show', 'closed', 'Tarix')),
     rows.length ? rows.map(TaskCard) : Empty(q ? 'Hech narsa topilmadi' : 'Ro\'yxat bo\'sh', q ? 'Boshqa so\'z bilan urinib ko\'ring.' : 'Bu bo\'limda topshiriq yo\'q.'));
 }
 
