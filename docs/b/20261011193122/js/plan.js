@@ -236,7 +236,9 @@ function PlanList(date, editable, canAdd = false) {
   const rows = items.map((i) => {
     const canTick = editable || (canAdd && forOf(i) === S.me.id);
     const task = i.task_id ? S.tasks.find((t) => t.id === i.task_id) : null;
-    return h('div', { class: 'planrow' + (fx.tick === i.id && i.done ? ' ticked' : '') },
+    // Animatsiya faqat bir marta: keyingi qayta chizishlarda takrorlanmaydi
+    const ticked = fx.tick === i.id && i.done; if (ticked) fx.tick = null;
+    return h('div', { class: 'planrow' + (ticked ? ' ticked' : '') },
       h('label', { class: 'check', style: 'flex:1;min-width:0' },
         h('input', { type: 'checkbox', checked: i.done, disabled: !canTick, onchange: () => togglePlan(i) }),
         h('span', { class: 'ptime' }, i.at_time ? i.at_time.slice(0, 5) : '—'),
