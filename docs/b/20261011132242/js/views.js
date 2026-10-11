@@ -366,12 +366,12 @@ export function More() {
     h('div', { class: 'list' },
       row('Tarix', 'Bajarilgan va bekor qilingan ishlar', () => { F.show = 'closed'; go('#/ishlar'); }),
       row('Savat', 'O\'chirilganlar, 30 kun ichida qaytariladi', () => go('#/savat')),
-      row('Eslatmalar', 'Takrorlanadigan va bir martalik', soon),
-      row('Takrorlanuvchi topshiriqlar', 'Har hafta yoki har oy o\'zi ochiladi', soon)),
+      row('Eslatmalar', 'Takrorlanadigan va bir martalik', () => go('#/eslatmalar')),
+      row('Takrorlanuvchi topshiriqlar', 'Har hafta yoki har oy o\'zi ochiladi', () => go('#/takror'))),
     h('div', { class: 'section' }, h('h2', { style: 'font-size:13px;color:var(--muted)' }, 'Sozlamalar')),
     h('div', { class: 'list' },
       row('Mening sozlamalarim', 'Bildirishnoma, tinch soatlar, PIN', soon),
-      S.me.is_admin && row('Admin panel', 'Holatlar, muhimlik, foydalanuvchilar', soon)),
+      S.me.is_admin && row('Admin panel', 'Muhimlik, vaqtlar, maqsadlar, foydalanuvchilar', () => go('#/admin'))),
     h('button', { class: 'btn danger', onclick: async () => { if (await confirmBox({ title: 'Hisobdan chiqilsinmi?', ok: 'Chiqish' })) sb.auth.signOut(); } }, 'Hisobdan chiqish'));
 }
 
