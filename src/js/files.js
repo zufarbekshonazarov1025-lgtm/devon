@@ -23,11 +23,46 @@ function put(url, file, onProgress) {
 }
 
 /** Topshiriq ichidagi «Hujjatlar» bo'limi. */
+/** Davom etayotgan yuklashlar: topshiriq id → { text, k }. Ekran qayta chizilsa ham yo'qolmaydi. */
+const UP = new Map();
+function paint(taskId) {
+  const box = document.getElementById('upl_' + taskId), btn = document.getElementById('uplbtn_' + taskId), u = UP.get(taskId);
+  if (btn) { btn.disabled = !!u; btn.textContent = u ? 'Yuklanmoqda…' : '+ Fayl biriktirish'; }
+  if (!box) return;
+  box.style.display = u ? '' : 'none';
+  if (u) { box.querySelector('.upltext').textContent = u.text; box.querySelector('.bar > div').style.width = `${Math.round(u.k * 100)}%`; }
+}
+const show = (taskId, text, k) => { if (text) UP.set(taskId, { text, k }); else UP.delete(taskId); paint(taskId); };
+
+async function uploadAll(t, files) {
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i], tag = files.length > 1 ? `${i + 1}/${files.length} · ` : '';
+    show(t.id, `${tag}${f.name}: tayyorlanmoqda…`, 0.03);
+    if (!f.size) { toast(`«${f.name}» bo'sh fayl`); continue; }
+    const s = await call({ action: 'session', task_id: t.id, name: f.name, mime: f.type, size: f.size });
+    if (s.err) { toast(s.err); break; }
+    let id;
+    try { id = await put(s.data.upload_url, f, (k) => show(t.id, `${tag}${f.name}: yuklanmoqda ${Math.round(k * 100)}%`, 0.05 + k * 0.85)); }
+    catch (e) { toast(`«${f.name}» yuklanmadi: ${e.message}`); continue; }
+    show(t.id, `${tag}${f.name}: saqlanmoqda…`, 0.95);
+    const d = await call({ action: 'done', task_id: t.id, file_id: id });
+    if (d.err) { toast(d.err); continue; }
+    toast(`«${f.name}» biriktirildi`);
+    refreshList(t.id);
+  }
+  show(t.id, '');
+  refreshList(t.id);
+}
+/** Ro'yxatni hozir ekranda turgan bo'limda yangilaydi (ekran orada qayta chizilgan bo'lishi mumkin). */
+function refreshList(taskId) { const el = document.getElementById('files_' + taskId); if (el && el._load) el._load(); }
+
+/** Topshiriq ichidagi «Hujjatlar» bo'limi. */
 export function Files(t) {
-  const list = h('div', { class: 'log' }, h('div', { class: 't-meta' }, 'Yuklanmoqda…'));
-  const bar = h('div', {}), label = h('span', {});
-  const status = h('div', { class: 'upl', role: 'status', style: 'display:none' }, h('div', { class: 'between' }, label, h('span', { class: 'spin', 'aria-hidden': 'true' })), h('div', { class: 'bar' }, bar));
-  const show = (text, k) => { status.style.display = text ? '' : 'none'; label.textContent = text || ''; bar.style.width = `${Math.round((k || 0) * 100)}%`; };
+  const list = h('div', { class: 'log', id: 'files_' + t.id }, h('div', { class: 't-meta' }, 'Yuklanmoqda…'));
+  const u = UP.get(t.id);
+  const status = h('div', { class: 'upl', id: 'upl_' + t.id, role: 'status', style: u ? '' : 'display:none' },
+    h('div', { class: 'between' }, h('span', { class: 'upltext' }, u ? u.text : ''), h('span', { class: 'spin', 'aria-hidden': 'true' })),
+    h('div', { class: 'bar' }, h('div', { style: `width:${u ? Math.round(u.k * 100) : 0}%` })));
   const load = async () => {
     const { data } = await sb.from('attachments').select('*').eq('task_id', t.id).order('created_at');
     const rows = data || [];
@@ -37,31 +72,14 @@ export function Files(t) {
       (a.uploader_id === S.me.id || S.me.is_admin) && h('button', { class: 'xbtn sm', type: 'button', 'aria-label': `«${a.name}» faylini olib tashlash`, onclick: async () => {
         if (!await confirmBox({ title: 'Fayl olib tashlansinmi?', text: 'U topshiriqdan chiqadi va Drive savatiga o\'tadi (30 kun turadi).', ok: 'Olib tashlash' })) return;
         const r = await call({ action: 'remove', task_id: t.id, attachment_id: a.id });
-        if (r.err) { toast(r.err); return; } load();
+        if (r.err) { toast(r.err); return; } refreshList(t.id);
       } }, '×'))) : [h('div', { class: 't-meta' }, 'Hujjat biriktirilmagan.')]));
   };
+  list._load = load;
   load();
 
-  const input = h('input', { type: 'file', multiple: true, style: 'display:none', onchange: async () => {
-    const files = [...input.files]; input.value = '';
-    btn.disabled = true; btn.textContent = 'Yuklanmoqda…';
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i], tag = files.length > 1 ? `${i + 1}/${files.length} · ` : '';
-      show(`${tag}${f.name}: tayyorlanmoqda…`, 0.03);
-      if (!f.size) { toast(`«${f.name}» bo'sh fayl`); continue; }
-      const s = await call({ action: 'session', task_id: t.id, name: f.name, mime: f.type, size: f.size });
-      if (s.err) { toast(s.err); break; }
-      let id;
-      try { id = await put(s.data.upload_url, f, (k) => { show(`${tag}${f.name}: yuklanmoqda ${Math.round(k * 100)}%`, 0.05 + k * 0.85); }); }
-      catch (e) { toast(`«${f.name}» yuklanmadi: ${e.message}`); continue; }
-      show(`${tag}${f.name}: saqlanmoqda…`, 0.95);
-      const d = await call({ action: 'done', task_id: t.id, file_id: id });
-      if (d.err) { toast(d.err); continue; }
-      await load(); toast(`«${f.name}» biriktirildi`);
-    }
-    show(''); btn.disabled = false; btn.textContent = '+ Fayl biriktirish';
-  } });
-  const btn = h('button', { class: 'btn ghost', type: 'button', onclick: () => input.click() }, '+ Fayl biriktirish');
+  const input = h('input', { type: 'file', multiple: true, style: 'display:none', onchange: () => { const files = [...input.files]; input.value = ''; if (files.length) uploadAll(t, files); } });
+  const btn = h('button', { class: 'btn ghost', type: 'button', id: 'uplbtn_' + t.id, disabled: !!u, onclick: () => input.click() }, u ? 'Yuklanmoqda…' : '+ Fayl biriktirish');
 
   return [h('div', { class: 'section' }, h('h2', {}, 'Hujjatlar')),
     h('section', { class: 'card' }, list,
