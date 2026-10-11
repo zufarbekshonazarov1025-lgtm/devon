@@ -160,3 +160,6 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(11,107,88,.4); o
 
 .who { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 8px; margin-left: 6px; white-space: nowrap; text-decoration: none; display: inline-block; }
 .who.a { background: var(--brand-tint); color: var(--brand-dark); } .who.b { background: #FBEFC9; color: #6B4A00; }
+
+.titlebtn { border: none; background: none; font: inherit; color: inherit; text-align: left; padding: 0; cursor: pointer; text-decoration: inherit; }
+button.who.tapwho { border: none; cursor: pointer; font-family: inherit; min-height: 28px; padding: 4px 9px; }

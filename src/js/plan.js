@@ -206,9 +206,23 @@ export function planItems(date) {
 /** Band kimniki: bo'sh bo'lsa reja egasiniki. */
 export const forOf = (i) => i.for_id || i.owner_id;
 const ownItems = (date) => planItems(date).filter((i) => forOf(i) === owner().id);
-const P = { who: 'all' };
+const P = { who: 'all', last: null };
 const tag = (i) => (forOf(i) !== owner().id ? ` (${nameOf(forOf(i), true)})` : '');
 const line = (i) => `${i.at_time ? i.at_time.slice(0, 5) + ' ' : ''}${i.title}${tag(i)}`;
+async function switchOwner(i) {
+  const next = S.profiles.find((p) => p.id !== forOf(i)); if (!next) return;
+  const { error } = await sb.from('plan_items').update({ for_id: next.id }).eq('id', i.id);
+  if (error) { toast('Saqlab bo\'lmadi'); return; }
+  await loadPlan(); toast(`Endi ${nameOf(next.id, true)}niki`); bus.render();
+}
+async function editItem(i) {
+  const v = await sheetForm({ title: 'Bandni tahrirlash', ok: 'Saqlash', fields: [
+    { id: 'title', label: 'Matn', required: true, value: i.title }, { id: 'time', label: 'Vaqt', type: 'time', value: i.at_time ? i.at_time.slice(0, 5) : '' }] });
+  if (!v) return;
+  const { error } = await sb.from('plan_items').update({ title: v.title, at_time: v.time || null }).eq('id', i.id);
+  if (error) { toast('Saqlab bo\'lmadi'); return; }
+  await loadPlan(); bus.render();
+}
 async function togglePlan(i) {
   const { error } = await sb.from('plan_items').update({ done: !i.done, done_at: !i.done ? new Date().toISOString() : null }).eq('id', i.id);
   if (error) { toast('Saqlab bo\'lmadi'); return; }
@@ -228,7 +242,11 @@ function PlanList(date, editable, canAdd = false) {
         h('input', { type: 'checkbox', checked: i.done, disabled: !canTick, onchange: () => togglePlan(i) }),
         h('span', { class: 'ptime' }, i.at_time ? i.at_time.slice(0, 5) : '—'),
         h('span', { style: `flex:1;min-width:0;overflow-wrap:anywhere;${i.done ? 'text-decoration:line-through;color:var(--muted)' : ''}` },
-          i.title, h('span', { class: 'who ' + (forOf(i) === owner().id ? 'a' : 'b') }, nameOf(forOf(i), true)), i.added_by && i.added_by !== i.owner_id && h('span', { class: 't-meta', style: 'color:var(--blue);font-weight:600' }, ` · ${nameOf(i.added_by, true)} qo'shdi`), i.added_after_approval && h('span', { class: 't-meta' }, ' · tasdiqdan keyin'), task && h('span', { class: 't-meta' }, ` · №${task.seq}`))),
+          i.title,
+          editable
+            ? h('button', { type: 'button', class: 'who tapwho ' + (forOf(i) === owner().id ? 'a' : 'b'), 'aria-label': `Egasi: ${nameOf(forOf(i), true)}. Almashtirish`, onclick: (e) => { e.preventDefault(); switchOwner(i); } }, nameOf(forOf(i), true), ' ⇄')
+            : h('span', { class: 'who ' + (forOf(i) === owner().id ? 'a' : 'b') }, nameOf(forOf(i), true)), i.added_by && i.added_by !== i.owner_id && h('span', { class: 't-meta', style: 'color:var(--blue);font-weight:600' }, ` · ${nameOf(i.added_by, true)} qo'shdi`), i.added_after_approval && h('span', { class: 't-meta' }, ' · tasdiqdan keyin'), task && h('span', { class: 't-meta' }, ` · №${task.seq}`))),
+      editable && h('button', { class: 'xbtn', type: 'button', style: 'font-size:17px', 'aria-label': `«${i.title}» bandini tahrirlash`, onclick: () => editItem(i) }, '✎'),
       (editable || (canAdd && i.added_by === S.me.id)) && h('button', { class: 'xbtn', type: 'button', 'aria-label': `«${i.title}» bandini o'chirish`, onclick: async () => {
         const { error } = await sb.from('plan_items').delete().eq('id', i.id);
         if (error) { toast('O\'chirib bo\'lmadi'); return; } await loadPlan(); bus.render();
@@ -241,9 +259,9 @@ function PlanList(date, editable, canAdd = false) {
   const myOpen = S.tasks.filter((t) => isOpen(t) && t.assignee_id === S.me.id);
   const link = h('select', { class: 'input', 'aria-label': 'Topshiriqqa bog\'lash' }, h('option', { value: '' }, 'Topshiriqqa bog\'lanmagan'), myOpen.map((t) => h('option', { value: t.id }, `№${t.seq} ${t.title.slice(0, 40)}`)));
   link.addEventListener('change', () => { if (link.value && !title.value.trim()) { const t = myOpen.find((x) => x.id === link.value); if (t) title.value = t.title; } });
-  const boss = S.profiles.find((p) => p.kind === 'rahbar');
   const whose = h('select', { class: 'input', 'aria-label': 'Band kimniki' }, S.profiles.map((p) => h('option', { value: p.id }, `Kimniki: ${p.id === S.me.id ? 'meniki' : nameOf(p.id, true)}`)));
-  whose.value = P.who !== 'all' ? P.who : (boss ? boss.id : S.me.id);
+  whose.value = P.who !== 'all' ? P.who : (P.last || S.me.id);
+  whose.addEventListener('change', () => { P.last = whose.value; });
   const add = async (e) => {
     e.preventDefault();
     const v = title.value.trim(); if (!v) { title.focus(); return; }
