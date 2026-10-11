@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Devon" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">#0B6B58</item>
+        <item name="colorPrimaryDark">#084F41</item>
+        <item name="colorAccent">#0B6B58</item>
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+    </style>
+</resources>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Devon belgisi: ochiq daftar, tilla muqova va belgi. Xavfsiz hudud uchun 108 dp maydon ichida kichraytirilgan. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="120" android:viewportHeight="120">
+    <group android:pivotX="60" android:pivotY="60" android:scaleX="0.62" android:scaleY="0.62">
+        <path android:fillColor="#FFFFFF" android:pathData="M33,30h18a5,5 0,0 1,5 5v50a5,5 0,0 1,-5 5h-18a5,5 0,0 1,-5 -5v-50a5,5 0,0 1,5 -5z" />
+        <path android:fillColor="#FFFFFF" android:pathData="M69,30h18a5,5 0,0 1,5 5v50a5,5 0,0 1,-5 5h-18a5,5 0,0 1,-5 -5v-50a5,5 0,0 1,5 -5z" />
+        <path android:strokeColor="#0B6B58" android:strokeWidth="4" android:strokeLineCap="round" android:pathData="M35,44h14M35,54h14M35,64h9M71,44h14M71,54h14" />
+        <path android:strokeColor="#E3B341" android:strokeWidth="5" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M71,70l5,5 9,-10" />
+        <path android:fillColor="#E3B341" android:pathData="M60,26a4,4 0,0 1,4 4v60a4,4 0,0 1,-8 0v-60a4,4 0,0 1,4 -4z" />
+    </group>
+</vector>
