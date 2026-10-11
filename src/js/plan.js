@@ -240,14 +240,17 @@ function PlanList(date, editable, canAdd = false) {
     return h('div', { class: 'planrow' },
       h('label', { class: 'check', style: 'flex:1;min-width:0' },
         h('input', { type: 'checkbox', checked: i.done, disabled: !canTick, onchange: () => togglePlan(i) }),
-        h('span', { class: 'ptime' }, i.at_time ? i.at_time.slice(0, 5) : '—'),
-        h('span', { style: `flex:1;min-width:0;overflow-wrap:anywhere;${i.done ? 'text-decoration:line-through;color:var(--muted)' : ''}` },
-          i.title,
-          editable
-            ? h('button', { type: 'button', class: 'who tapwho ' + (forOf(i) === owner().id ? 'a' : 'b'), 'aria-label': `Egasi: ${nameOf(forOf(i), true)}. Almashtirish`, onclick: (e) => { e.preventDefault(); switchOwner(i); } }, nameOf(forOf(i), true), ' ⇄')
-            : h('span', { class: 'who ' + (forOf(i) === owner().id ? 'a' : 'b') }, nameOf(forOf(i), true)), i.added_by && i.added_by !== i.owner_id && h('span', { class: 't-meta', style: 'color:var(--blue);font-weight:600' }, ` · ${nameOf(i.added_by, true)} qo'shdi`), i.added_after_approval && h('span', { class: 't-meta' }, ' · tasdiqdan keyin'), task && h('span', { class: 't-meta' }, ` · №${task.seq}`))),
-      editable && h('button', { class: 'xbtn', type: 'button', style: 'font-size:17px', 'aria-label': `«${i.title}» bandini tahrirlash`, onclick: () => editItem(i) }, '✎'),
-      (editable || (canAdd && i.added_by === S.me.id)) && h('button', { class: 'xbtn', type: 'button', 'aria-label': `«${i.title}» bandini o'chirish`, onclick: async () => {
+        h('span', { style: 'flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding:8px 0' },
+          h('span', { style: `overflow-wrap:anywhere;${i.done ? 'text-decoration:line-through;color:var(--muted)' : ''}` }, i.title),
+          h('span', { class: 'pmeta' },
+            i.at_time && h('b', {}, i.at_time.slice(0, 5)),
+            editable
+              ? h('button', { type: 'button', class: 'who tapwho ' + (forOf(i) === owner().id ? 'a' : 'b'), 'aria-label': `Egasi: ${nameOf(forOf(i), true)}. Almashtirish`, onclick: (e) => { e.preventDefault(); switchOwner(i); } }, nameOf(forOf(i), true), ' ⇄')
+              : h('span', { class: 'who ' + (forOf(i) === owner().id ? 'a' : 'b') }, nameOf(forOf(i), true)),
+            i.added_by && i.added_by !== i.owner_id && h('span', { style: 'color:var(--blue);font-weight:600' }, `${nameOf(i.added_by, true)} qo'shdi`),
+            i.added_after_approval && h('span', {}, 'tasdiqdan keyin'), task && h('span', {}, `№${task.seq}`)))),
+      editable && h('button', { class: 'xbtn sm', type: 'button', 'aria-label': `«${i.title}» bandini tahrirlash`, onclick: () => editItem(i) }, icon('edit', 18)),
+      (editable || (canAdd && i.added_by === S.me.id)) && h('button', { class: 'xbtn sm', type: 'button', 'aria-label': `«${i.title}» bandini o'chirish`, onclick: async () => {
         const { error } = await sb.from('plan_items').delete().eq('id', i.id);
         if (error) { toast('O\'chirib bo\'lmadi'); return; } await loadPlan(); bus.render();
       } }, '×'));

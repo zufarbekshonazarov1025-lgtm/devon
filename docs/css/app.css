@@ -163,3 +163,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(11,107,88,.4); o
 
 .titlebtn { border: none; background: none; font: inherit; color: inherit; text-align: left; padding: 0; cursor: pointer; text-decoration: inherit; }
 button.who.tapwho { border: none; cursor: pointer; font-family: inherit; min-height: 28px; padding: 4px 9px; }
+
+.pmeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.pmeta b { font-weight: 700; color: var(--grey-ink); }
+.pmeta .who { margin-left: 0; }
+.xbtn.sm { width: 40px; color: var(--muted); display: flex; align-items: center; justify-content: center; }
+.planrow .check { align-items: flex-start; } .planrow .check input { margin-top: 10px; flex: none; }
