@@ -9,11 +9,28 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="css/app.css">
+<style>
+html,body{margin:0;height:100%;background:#F4F7F6;color:#14201D;font-family:'Onest',system-ui,sans-serif}
+.boot{padding:40vh 16px 0;font-size:28px;font-weight:700;color:#0B6B58;text-align:center}
+.boot small{display:block;margin-top:12px;font-size:14px;font-weight:500;color:#56645F}
+</style>
 </head>
 <body>
 <div id="app"><div class="boot">Devon</div></div>
 <div id="toast" role="status" aria-live="polite"></div>
-<script type="module" src="js/app.js"></script>
+<script type="module">
+// Har ochilganda eng yangi versiyani so'raydi; internet bo'lmasa oxirgi ma'lum versiyani ochadi.
+let v = null;
+try { v = (await fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then((r) => r.json())).v; } catch (e) {}
+try { if (v) localStorage.setItem('devon_v', v); else v = localStorage.getItem('devon_v'); } catch (e) {}
+if (!v) {
+  document.querySelector('.boot').innerHTML = 'Devon<small>Dasturni yuklab bo\'lmadi. Internetni tekshirib, sahifani yangilang.</small>';
+} else {
+  const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = `b/${v}/css/app.css`; document.head.append(css);
+  import(`./b/${v}/js/app.js`).catch(() => {
+    document.querySelector('.boot').innerHTML = 'Devon<small>Dasturni yuklab bo\'lmadi. Sahifani yangilang.</small>';
+  });
+}
+</script>
 </body>
 </html>
