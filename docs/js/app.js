@@ -1,6 +1,6 @@
 import { sb, S, bus, h, icon, loadBase, loadTasks, loadAll, toast } from './core.js';
 import { ReportsView, ReportDetail, pendingForMe } from './plan.js';
-import { loadExtra, runRecurrences, Calendar, Reminders, Recurrences, Admin } from './extra.js';
+import { loadExtra, runRecurrences, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
 import { Login, NoProfile, Home, Tasks, TaskForm, TaskDetail, Approvals, Soon, More, Trash, needsMe } from './views.js';
 
 const app = document.getElementById('app');
@@ -28,6 +28,7 @@ function route() {
   if (hash === '#/taqvim') return [Calendar(), hash];
   if (hash === '#/eslatmalar') return [Reminders(), '#/yana'];
   if (hash === '#/takror') return [Recurrences(), '#/yana'];
+  if (hash === '#/kutilmoqda') return [WaitingOn(), '#/yana'];
   if (hash === '#/admin') return [Admin(), '#/yana'];
   if (hash === '#/tasdiq') return [Approvals(), hash];
   if (hash === '#/hisobot') return [ReportsView(), hash];

@@ -1,3 +1,4 @@
+import { TaskCard } from './views.js';
 import { sb, S, bus, h, icon, toast, confirmBox, today, iso, fmtDate, isOpen, nameOf, go, Head, BackHead, Empty,
   addDays, mondayOf, monthStart, monthEnd, fmtDay, monthName, loadTasks, loadBase, ping } from './core.js';
 
@@ -370,4 +371,17 @@ export function Admin() {
     h('div', { class: 'list' }, S.profiles.map((p) => h('button', { type: 'button', onclick: () => rename(p) },
       h('span', {}, h('b', {}, p.full_name), h('small', {}, `${p.kind === 'rahbar' ? 'Rahbar' : 'Yordamchi'}${p.is_admin ? ' · admin' : ''} · ko'rinishi: ${p.short_name}`)), icon('next', 18, '#56645F')))),
     h('div', { class: 't-meta', style: 'padding:0 4px' }, 'Eslatma vaqtlari telefonga bildirishnoma ulangandan keyin kuchga kiradi. Muhimlik va maqsadlar darhol ishlaydi.'));
+}
+
+// ---------- Kimdan kutilmoqda ----------
+export function WaitingOn() {
+  const open = S.tasks.filter((t) => isOpen(t) && t.waiting_on);
+  const groups = S.contacts.map((c) => ({ c, tasks: open.filter((t) => t.waiting_on === c.id).sort((a, b) => a.due_date.localeCompare(b.due_date)) }))
+    .filter((g) => g.tasks.length).sort((a, b) => a.tasks[0].due_date.localeCompare(b.tasks[0].due_date));
+  return h('main', { class: 'view' },
+    BackHead('Kimdan kutilmoqda', '#/yana'),
+    h('div', { class: 't-meta', style: 'padding:0 4px' }, 'Uchinchi shaxsdan javob yoki ish kutilayotgan ochiq topshiriqlar. Ism topshiriqni yaratish yoki tahrirlashda «Kimdan kutilmoqda» maydoniga yoziladi.'),
+    groups.length ? groups.map((g) => [
+      h('div', { class: 'section' }, h('h2', {}, g.c.name), h('span', { class: 't-meta' }, `${g.tasks.length} ta`)),
+      g.tasks.map(TaskCard)]) : Empty('Hech kimdan kutilmayapti', 'Ochiq topshiriqlarda «Kimdan kutilmoqda» to\'ldirilmagan.'));
 }
