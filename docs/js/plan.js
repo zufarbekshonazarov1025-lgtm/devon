@@ -121,7 +121,7 @@ export function RequestCard(r) {
   if (r.kind === 'reja' && rep) {
     const items = planItems(rep.period_start);
     detail = rep.period === 'kunlik'
-      ? h('div', { class: 'text' }, items.length ? items.map((i) => `${i.at_time ? i.at_time.slice(0, 5) + '  ' : ''}${i.title}`).join('\n') : 'Reja bandlari kiritilmagan.')
+      ? h('div', { class: 'text' }, items.length ? items.map(line).join('\n') : 'Reja bandlari kiritilmagan.')
       : h('div', { class: 'text' }, rep.body || '');
   }
   if (r.kind === 'hisobot' && rep) detail = h('div', { class: 'text' }, rep.body || '');
@@ -203,45 +203,58 @@ export function planItems(date) {
   return S.plan.filter((i) => i.owner_id === owner().id && i.plan_date === date)
     .sort((a, b) => (a.at_time || '99').localeCompare(b.at_time || '99') || a.sort - b.sort || a.created_at.localeCompare(b.created_at));
 }
+/** Band kimniki: bo'sh bo'lsa reja egasiniki. */
+export const forOf = (i) => i.for_id || i.owner_id;
+const ownItems = (date) => planItems(date).filter((i) => forOf(i) === owner().id);
+const P = { who: 'all' };
+const tag = (i) => (forOf(i) !== owner().id ? ` (${nameOf(forOf(i), true)})` : '');
+const line = (i) => `${i.at_time ? i.at_time.slice(0, 5) + ' ' : ''}${i.title}${tag(i)}`;
 async function togglePlan(i) {
   const { error } = await sb.from('plan_items').update({ done: !i.done, done_at: !i.done ? new Date().toISOString() : null }).eq('id', i.id);
   if (error) { toast('Saqlab bo\'lmadi'); return; }
   await loadPlan(); bus.render();
 }
 function PlanList(date, editable, canAdd = false) {
-  const items = planItems(date);
+  const all = planItems(date), items = all.filter((i) => P.who === 'all' || forOf(i) === P.who);
   const approved = findDoc('reja', 'kunlik', date)?.status === 'tasdiqlandi';
+  const chip = (val, label) => h('button', { type: 'button', class: 'fchip' + (P.who === val ? ' on' : ''), 'aria-pressed': String(P.who === val), onclick: () => { P.who = val; bus.render(); } }, label);
+  const filter = all.some((i) => forOf(i) !== forOf(all[0])) || P.who !== 'all'
+    ? h('div', { class: 'filters', style: 'margin-bottom:4px' }, chip('all', 'Hammasi'), S.profiles.map((p) => chip(p.id, p.id === S.me.id ? 'Meniki' : nameOf(p.id, true)))) : null;
   const rows = items.map((i) => {
+    const canTick = editable || (canAdd && forOf(i) === S.me.id);
     const task = i.task_id ? S.tasks.find((t) => t.id === i.task_id) : null;
     return h('div', { class: 'planrow' },
       h('label', { class: 'check', style: 'flex:1;min-width:0' },
-        h('input', { type: 'checkbox', checked: i.done, disabled: !editable, onchange: () => togglePlan(i) }),
+        h('input', { type: 'checkbox', checked: i.done, disabled: !canTick, onchange: () => togglePlan(i) }),
         h('span', { class: 'ptime' }, i.at_time ? i.at_time.slice(0, 5) : '—'),
         h('span', { style: `flex:1;min-width:0;overflow-wrap:anywhere;${i.done ? 'text-decoration:line-through;color:var(--muted)' : ''}` },
-          i.title, i.added_by && i.added_by !== i.owner_id && h('span', { class: 't-meta', style: 'color:var(--blue);font-weight:600' }, ` · ${nameOf(i.added_by, true)} qo'shdi`), i.added_after_approval && h('span', { class: 't-meta' }, ' · tasdiqdan keyin'), task && h('span', { class: 't-meta' }, ` · №${task.seq}`))),
+          i.title, h('span', { class: 'who ' + (forOf(i) === owner().id ? 'a' : 'b') }, nameOf(forOf(i), true)), i.added_by && i.added_by !== i.owner_id && h('span', { class: 't-meta', style: 'color:var(--blue);font-weight:600' }, ` · ${nameOf(i.added_by, true)} qo'shdi`), i.added_after_approval && h('span', { class: 't-meta' }, ' · tasdiqdan keyin'), task && h('span', { class: 't-meta' }, ` · №${task.seq}`))),
       (editable || (canAdd && i.added_by === S.me.id)) && h('button', { class: 'xbtn', type: 'button', 'aria-label': `«${i.title}» bandini o'chirish`, onclick: async () => {
         const { error } = await sb.from('plan_items').delete().eq('id', i.id);
         if (error) { toast('O\'chirib bo\'lmadi'); return; } await loadPlan(); bus.render();
       } }, '×'));
   });
-  if (!editable && !canAdd) return h('div', {}, rows.length ? rows : h('div', { class: 't-meta' }, 'Reja bandlari kiritilmagan.'));
+  if (!editable && !canAdd) return h('div', {}, filter, rows.length ? rows : h('div', { class: 't-meta' }, 'Reja bandlari kiritilmagan.'));
 
   const time = h('input', { class: 'input', type: 'time', 'aria-label': 'Vaqt', style: 'width:112px;flex:none' });
   const title = h('input', { class: 'input', 'aria-label': 'Reja bandi', placeholder: 'Yangi band', maxlength: 200 });
   const myOpen = S.tasks.filter((t) => isOpen(t) && t.assignee_id === S.me.id);
   const link = h('select', { class: 'input', 'aria-label': 'Topshiriqqa bog\'lash' }, h('option', { value: '' }, 'Topshiriqqa bog\'lanmagan'), myOpen.map((t) => h('option', { value: t.id }, `№${t.seq} ${t.title.slice(0, 40)}`)));
   link.addEventListener('change', () => { if (link.value && !title.value.trim()) { const t = myOpen.find((x) => x.id === link.value); if (t) title.value = t.title; } });
+  const boss = S.profiles.find((p) => p.kind === 'rahbar');
+  const whose = h('select', { class: 'input', 'aria-label': 'Band kimniki' }, S.profiles.map((p) => h('option', { value: p.id }, `Kimniki: ${p.id === S.me.id ? 'meniki' : nameOf(p.id, true)}`)));
+  whose.value = P.who !== 'all' ? P.who : (boss ? boss.id : S.me.id);
   const add = async (e) => {
     e.preventDefault();
     const v = title.value.trim(); if (!v) { title.focus(); return; }
-    const { error } = await sb.from('plan_items').insert({ owner_id: owner().id, added_by: S.me.id, plan_date: date, at_time: time.value || null, title: v, task_id: editable ? (link.value || null) : null, added_after_approval: approved, sort: items.length });
+    const { error } = await sb.from('plan_items').insert({ owner_id: owner().id, added_by: S.me.id, for_id: whose.value, plan_date: date, at_time: time.value || null, title: v, task_id: editable ? (link.value || null) : null, added_after_approval: approved, sort: all.length });
     if (error) { toast('Qo\'shib bo\'lmadi: ' + error.message); return; }
     if (!editable) ping(owner().id, 'reja', 'Rejangizga band qo\'shildi', v, 'plan', null);
     await loadPlan(); bus.render();
   };
-  return h('div', {}, rows.length ? rows : h('div', { class: 't-meta', style: 'padding:6px 0' }, 'Hali band yo\'q. Birinchisini qo\'shing.'),
+  return h('div', {}, filter, rows.length ? rows : h('div', { class: 't-meta', style: 'padding:6px 0' }, all.length ? 'Bu filtrda band yo\'q.' : 'Hali band yo\'q. Birinchisini qo\'shing.'),
     h('form', { onsubmit: add, style: 'display:flex;flex-direction:column;gap:8px;margin-top:10px' },
-      h('div', { class: 'row' }, time, title), editable && myOpen.length ? link : null,
+      h('div', { class: 'row' }, time, title), whose, editable && myOpen.length ? link : null,
       h('button', { class: 'btn ghost', type: 'submit' }, '+ Band qo\'shish')));
 }
 
@@ -250,10 +263,9 @@ export function HomePlan() {
   const d = today(), items = planItems(d), done = items.filter((i) => i.done).length;
   const rep = findDoc('reja', 'kunlik', d);
   if (!iAmOwner()) {
-    const pct = items.length ? Math.round((done / items.length) * 100) : 0;
     return h('section', { class: 'card' },
-      h('div', { class: 'between' }, h('b', {}, `${nameOf(owner().id, true)}: bugungi reja`), h('span', { class: 't-meta' }, items.length ? `${items.length} tadan ${done} tasi bajarildi` : 'Kiritilmagan')),
-      h('div', { class: 'bar', role: 'img', 'aria-label': `Rejaning ${pct} foizi bajarildi` }, h('div', { style: `width:${pct}%` })),
+      h('div', { class: 'between' }, h('b', {}, 'Bugungi kun tartibi'), h('span', { class: 't-meta' }, items.length ? `${items.length} tadan ${done} tasi bajarildi` : 'Kiritilmagan')),
+      PlanList(d, false, true),
       h('a', { href: '#/hisobot', style: 'font-size:13px;font-weight:600' }, 'Reja va hisobotni ko\'rish'));
   }
   return h('section', { class: 'card' },
@@ -267,13 +279,13 @@ const numbered = (arr) => (arr.length ? arr.map((x, i) => `${i + 1}. ${x}`).join
 function genDaily(date) {
   const o = owner().id;
   const doneTasks = S.tasks.filter((t) => t.assignee_id === o && dayOf(t.submitted_at) === date).map((t) => t.title);
-  const items = planItems(date);
+  const items = ownItems(date);
   const donePlan = items.filter((i) => i.done && !doneTasks.includes(i.title)).map((i) => i.title);
   const inWork = S.tasks.filter((t) => t.assignee_id === o && ['jarayonda', 'kutilmoqda'].includes(t.status)).map((t) => `${t.title} (muddat ${fmtDate(t.due_date)})`);
   const undone = items.filter((i) => !i.done).map((i) => `${i.title} (sabab: )`);
   const asks = S.requests.filter((r) => r.requester_id === o && r.status === 'kutilmoqda' && ['qaror', 'muddat'].includes(r.kind))
     .map((r) => (r.kind === 'muddat' ? `Muddatni ko'chirish: ${r.title} (${fmtDate(r.payload.old_due)} → ${fmtDate(r.payload.new_due)})` : `Qaror: ${r.title}`));
-  const tomorrow = planItems(addDays(date, 1)).map((i) => `${i.at_time ? i.at_time.slice(0, 5) + ' ' : ''}${i.title}`);
+  const tomorrow = ownItems(addDays(date, 1)).map((i) => `${i.at_time ? i.at_time.slice(0, 5) + ' ' : ''}${i.title}`);
   return `Bajarildi:\n${numbered([...doneTasks, ...donePlan])}\n\nJarayonda:\n${numbered(inWork)}\n\nBajarilmadi:\n${numbered(undone)}\n\nSizning qaroringiz kerak:\n${numbered(asks)}\n\nErtangi muhim ishlar:\n${numbered(tomorrow)}`;
 }
 
@@ -283,7 +295,7 @@ export function indicators(start, end) {
   const good = done.filter((t) => onTime(t)).length;
   const moved = S.requests.filter((r) => r.kind === 'muddat' && r.status === 'tasdiqlandi' && r.requester_id === o && inRange(dayOf(r.responded_at), start, end)).length;
   const returned = S.tasks.filter((t) => t.assignee_id === o && t.returned_count > 0 && inRange(dayOf(t.updated_at), start, end)).length;
-  const items = S.plan.filter((i) => i.owner_id === o && inRange(i.plan_date, start, last));
+  const items = S.plan.filter((i) => i.owner_id === o && forOf(i) === o && inRange(i.plan_date, start, last));
   // Hisobot intizomi: yakshanbadan tashqari kunlar, birinchi hujjat kunidan boshlab
   const docs = S.reports.filter((r) => r.owner_id === o && r.period === 'kunlik');
   const first = docs.length ? docs.reduce((m, r) => (r.period_start < m ? r.period_start : m), docs[0].period_start) : null;
@@ -392,11 +404,11 @@ function DailyTab() {
       rep && rep.status === 'qaytarildi' && rep.approver_comment && h('div', { class: 'banner', style: 'background:var(--red-tint);color:var(--red)' }, 'Qaytarildi: ' + rep.approver_comment),
       PlanList(d, mine && d >= today(), !mine && d >= today()),
       mine && d >= today() && yUndone.length > 0 && h('button', { class: 'btn ghost', onclick: async () => {
-        const rows = yUndone.map((i, n) => ({ owner_id: S.me.id, plan_date: d, at_time: i.at_time, title: i.title, task_id: i.task_id, carried_from: i.id, sort: 100 + n, added_after_approval: rep?.status === 'tasdiqlandi' }));
+        const rows = yUndone.map((i, n) => ({ owner_id: S.me.id, plan_date: d, at_time: i.at_time, title: i.title, task_id: i.task_id, carried_from: i.id, for_id: i.for_id || null, added_by: S.me.id, sort: 100 + n, added_after_approval: rep?.status === 'tasdiqlandi' }));
         const { error } = await sb.from('plan_items').insert(rows);
         if (error) { toast('Ko\'chirib bo\'lmadi'); return; } await loadPlan(); toast(`${rows.length} ta band ko'chirildi`); bus.render();
       } }, `Oldingi kundan bajarilmagan ${yUndone.length} ta bandni ko'chirish`),
-      canSend && h('button', { class: 'btn', onclick: () => sendDoc({ docType: 'reja', period: 'kunlik', start: d, end: d, body: planItems(d).map((i) => `${i.at_time ? i.at_time.slice(0, 5) + ' ' : ''}${i.title}`).join('\n') }) }, rep?.status === 'qaytarildi' ? 'Rejani qayta yuborish' : 'Rejani tasdiqqa yuborish'),
+      canSend && h('button', { class: 'btn', onclick: () => sendDoc({ docType: 'reja', period: 'kunlik', start: d, end: d, body: planItems(d).map(line).join('\n') }) }, rep?.status === 'qaytarildi' ? 'Rejani qayta yuborish' : 'Rejani tasdiqqa yuborish'),
       req && h('div', { class: 'row' },
         h('button', { class: 'btn', onclick: () => respond(req, true, null) }, 'Rejani tasdiqlash'),
         h('button', { class: 'btn ghost', onclick: async () => { const v = await ask({ title: 'Izoh yozing', label: 'Nimani o\'zgartirish kerak', ok: 'Yuborish' }); if (v != null) respond(req, false, v); } }, 'Izoh yozish'))),
@@ -465,7 +477,7 @@ export function ReportDetail(id) {
       h('div', { class: 'text' }, r.body || ''),
       r.doc_type === 'reja' && r.period === 'kunlik' && planItems(r.period_start).length > 0 && h('div', {},
         h('div', { class: 't-meta', style: 'margin-bottom:4px' }, 'Hozirgi holati'),
-        planItems(r.period_start).map((i) => h('div', { class: 'text', style: i.done ? 'color:var(--brand-dark)' : '' }, `${i.done ? '✓' : '○'} ${i.at_time ? i.at_time.slice(0, 5) + ' ' : ''}${i.title}${i.added_after_approval ? ' (tasdiqdan keyin)' : ''}`))),
+        planItems(r.period_start).map((i) => h('div', { class: 'text', style: i.done ? 'color:var(--brand-dark)' : '' }, `${i.done ? '✓' : '○'} ${line(i)}${i.added_after_approval ? ' (tasdiqdan keyin)' : ''}`))),
       h('div', { class: 't-meta' }, `Yuborilgan: ${fmtDateTime(r.sent_at)}${r.on_time === false ? ' · kechikib' : ''}`),
       r.approved_at && h('div', { class: 't-meta' }, `Tasdiqlagan: ${nameOf(r.approver_id, true)} · ${fmtDateTime(r.approved_at)}`),
       r.approver_comment && h('div', {}, h('div', { class: 't-meta' }, 'Izoh'), h('div', { class: 'text' }, r.approver_comment)),

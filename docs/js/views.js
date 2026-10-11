@@ -75,7 +75,7 @@ export function Home() {
 
   // Shu kunga tegishli hamma ish bajarilgan bo'lsa
   const dueToday = S.tasks.filter((t) => t.assignee_id === me.id && t.due_date === today() && t.status !== 'bekor');
-  const planToday = me.id === owner().id ? S.plan.filter((i) => i.owner_id === me.id && i.plan_date === today()) : [];
+  const planToday = me.id === owner().id ? S.plan.filter((i) => i.owner_id === me.id && (i.for_id || i.owner_id) === me.id && i.plan_date === today()) : [];
   const barokat = dueToday.length + planToday.length > 0 && dueToday.every((t) => !isOpen(t) || t.status === 'tekshiruvda') && planToday.every((i) => i.done);
 
   const reqs = pendingForMe();
