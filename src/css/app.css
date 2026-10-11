@@ -261,3 +261,17 @@ html, body { overflow-x: hidden; overscroll-behavior-x: none; }
 .spin { width: 18px; height: 18px; flex: none; border-radius: 9px; border: 2.5px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: spin 2s linear infinite !important; } }
+
+/* ---------- Fayl ko'rish oynasi ---------- */
+.overlay.viewer { flex-direction: column; align-items: stretch; justify-content: flex-start; background: var(--bg); animation: ovin .15s ease-out both; }
+.vhead { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--card); border-bottom: 1px solid var(--line); }
+.vname { flex: 1; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vhead .iconbtn { font-size: 22px; font-weight: 600; } .vz { font-size: 12px; font-weight: 700; color: var(--muted); width: 40px; text-align: center; }
+.vbody { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; --z: 1; }
+.vwait { min-height: 60vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; color: var(--muted); font-size: 14px; }
+.vwait b { color: var(--ink); font-size: 16px; } .vwait .spin { width: 28px; height: 28px; border-radius: 14px; color: var(--brand); }
+.vimg { display: block; width: calc(100% * var(--z)); max-width: none; height: auto; margin: 0 auto; }
+.vpages { width: calc(100% * var(--z)); padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.vpage { width: 100%; height: auto; background: #fff; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+.vfoot { display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: var(--card); border-top: 1px solid var(--line); } .vfoot > * { flex: 1; }
+button.filelink { text-align: left; }
