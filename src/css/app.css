@@ -250,3 +250,7 @@ html, body { overflow-x: hidden; overscroll-behavior-x: none; }
 :root[data-theme="tun"] .overlay { background: rgba(0,0,0,.6); }
 :root[data-theme="tun"] #toast { background: #E8EFEC; color: #0F1513; }
 :root[data-theme="tun"] .seg button.on { background: #33423D; }
+
+.filerow { display: flex; align-items: center; gap: 4px; border-top: 1px solid var(--soft); padding-top: 8px; } .filerow:first-child { border-top: none; padding-top: 0; }
+.filelink { flex: 1; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 10px; color: var(--ink); }
+.filelink b { display: block; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }

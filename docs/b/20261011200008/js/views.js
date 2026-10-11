@@ -1,5 +1,6 @@
 import { sb, S, bus, h, icon, toast, ask, confirmBox, today, fmtDate, fmtDateTime, dayOf, daysLeft, longToday, greeting,
   celebrate, STATUS, isOpen, priority, dueChip, onTime, onTimeStats, nameOf, other, profile, loadTasks, updateTask, notify, go, Head, BackHead, Empty, owner } from './core.js';
+import { Files } from './files.js';
 import { Bell, HomeKudos, StreakChip, KudosBlock, downloadExcel } from './more.js';
 import { HomePlan, RequestCard, pendingForMe, mySentRequests, askDecision, askReschedule, SentCard } from './plan.js';
 
@@ -328,6 +329,7 @@ export function TaskDetail(id) {
       t.result && h('div', {}, h('div', { class: 't-meta' }, 'Natija'), h('div', { class: 'text' }, t.result))),
     actions.length ? h('div', { class: 'row', style: 'flex-wrap:wrap' }, actions) : null,
     KudosBlock(t),
+    Files(t),
     h('div', { class: 'section' }, h('h2', {}, 'Izohlar')),
     h('section', { class: 'card' }, comments,
       h('div', { class: 'field' }, h('label', { for: 'c_new' }, 'Yangi izoh'), cInput),

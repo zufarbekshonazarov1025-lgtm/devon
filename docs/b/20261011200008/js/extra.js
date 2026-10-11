@@ -1,4 +1,5 @@
 import { TaskCard } from './views.js';
+import { DriveCard } from './files.js';
 import { sb, S, bus, h, icon, toast, confirmBox, today, iso, fmtDate, isOpen, nameOf, go, Head, BackHead, Empty,
   addDays, mondayOf, monthStart, monthEnd, fmtDay, monthName, loadTasks, loadBase, ping } from './core.js';
 
@@ -373,6 +374,7 @@ export function Admin() {
       num('savat', 'Savatda necha kun saqlansin', s.savat_kun ?? 30, 1, 365)),
     err,
     h('button', { class: 'btn', type: 'button', onclick: save }, 'Sozlamalarni saqlash'),
+    DriveCard(),
     h('div', { class: 'section' }, h('h2', {}, 'Foydalanuvchilar')),
     h('div', { class: 'list' }, S.profiles.map((p) => h('button', { type: 'button', onclick: () => rename(p) },
       h('span', {}, h('b', {}, p.full_name), h('small', {}, `${p.kind === 'rahbar' ? 'Rahbar' : 'Yordamchi'}${p.is_admin ? ' · admin' : ''} · ko'rinishi: ${p.short_name}`)), icon('next', 18, '#56645F')))),

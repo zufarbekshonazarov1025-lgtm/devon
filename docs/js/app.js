@@ -2,10 +2,12 @@ import { sb, S, bus, h, icon, loadBase, loadTasks, loadAll, toast, countUp } fro
 import { ReportsView, ReportDetail, pendingForMe } from './plan.js';
 import { loadExtra, runRecurrences, calShift, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
 import { loadMore, applyTheme, Notifications, MySettings, FromText } from './more.js';
+import { driveReturn } from './files.js';
 import { Login, NoProfile, Home, Tasks, TaskForm, TaskDetail, Approvals, Soon, More, Trash, needsMe } from './views.js';
 
 const app = document.getElementById('app');
 applyTheme();
+driveReturn();
 
 const NAV = [
   ['#/bugun', 'Bugun', 'home'], ['#/ishlar', 'Ishlar', 'list'], ['#/taqvim', 'Taqvim', 'cal'],
