@@ -112,3 +112,15 @@ textarea.input { min-height: 88px; resize: vertical; }
 #toast { position: fixed; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px; font-weight: 500; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 30; max-width: 90vw; text-align: center; }
 #toast.show { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.planrow { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--soft); }
+.planrow:last-of-type { border-bottom: none; }
+.ptime { font-size: 13px; font-weight: 600; color: var(--muted); width: 42px; flex: none; }
+.xbtn { width: 44px; height: 44px; flex: none; border: none; background: none; font-size: 22px; line-height: 1; color: var(--muted); cursor: pointer; border-radius: 12px; }
+.xbtn:active { background: var(--soft); }
+.bar { height: 10px; border-radius: 5px; background: var(--soft); overflow: hidden; display: flex; gap: 2px; }
+.bar > div { background: var(--brand); height: 100%; }
+.bar.two > .late { background: #E08A00; }
+.seg { display: flex; background: var(--soft); border-radius: 14px; padding: 4px; gap: 2px; }
+.seg button { flex: 1; min-height: 42px; border: none; border-radius: 10px; background: transparent; color: var(--grey-ink); font-weight: 600; font-size: 13px; cursor: pointer; padding: 0 4px; }
+.seg button.on { background: var(--card); color: var(--ink); font-weight: 700; }

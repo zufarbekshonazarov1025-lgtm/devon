@@ -1,17 +1,6 @@
 import { sb, S, bus, h, icon, toast, ask, confirmBox, today, fmtDate, fmtDateTime, dayOf, daysLeft, longToday, greeting,
-  STATUS, isOpen, priority, dueChip, onTime, onTimeStats, nameOf, other, profile, loadTasks, updateTask, notify } from './core.js';
-
-const go = (hash) => { location.hash = hash; };
-
-// ---------- Umumiy bo'laklar ----------
-function Head(sub, title, right) {
-  return h('header', { class: 'head' }, h('div', {}, h('div', { class: 'sub' }, sub), h('h1', {}, title)), right);
-}
-function BackHead(title, to = '#/ishlar') {
-  return h('header', { class: 'head', style: 'padding-top:14px' },
-    h('div', {}, h('button', { class: 'back', type: 'button', onclick: () => go(to) }, icon('back', 20), 'Orqaga'), h('h1', { style: 'font-size:22px' }, title)));
-}
-function Empty(title, text) { return h('div', { class: 'empty' }, h('b', {}, title), text); }
+  STATUS, isOpen, priority, dueChip, onTime, onTimeStats, nameOf, other, profile, loadTasks, updateTask, notify, go, Head, BackHead, Empty, owner } from './core.js';
+import { HomePlan, RequestCard, pendingForMe, mySentRequests, askDecision, askReschedule, SentCard } from './plan.js';
 
 export function TaskCard(t) {
   const pr = priority(t), du = dueChip(t);
@@ -86,10 +75,13 @@ export function Home() {
 
   // Shu kunga tegishli hamma ish bajarilgan bo'lsa
   const dueToday = S.tasks.filter((t) => t.assignee_id === me.id && t.due_date === today() && t.status !== 'bekor');
-  const barokat = dueToday.length > 0 && dueToday.every((t) => !isOpen(t) || t.status === 'tekshiruvda');
+  const planToday = me.id === owner().id ? S.plan.filter((i) => i.owner_id === me.id && i.plan_date === today()) : [];
+  const barokat = dueToday.length + planToday.length > 0 && dueToday.every((t) => !isOpen(t) || t.status === 'tekshiruvda') && planToday.every((i) => i.done);
 
-  const waitingBlock = waiting.length ? [
-    h('div', { class: 'section' }, h('h2', {}, 'Sizdan javob kutmoqda'), h('span', { class: 'chip red' }, waiting.length)),
+  const reqs = pendingForMe();
+  const waitingBlock = waiting.length + reqs.length ? [
+    h('div', { class: 'section' }, h('h2', {}, 'Sizdan javob kutmoqda'), h('span', { class: 'chip red' }, waiting.length + reqs.length)),
+    reqs.map((r) => RequestCard(r)),
     waiting.map((t) => WaitCard(t)),
   ] : [];
   const mineBlock = [
@@ -108,7 +100,7 @@ export function Home() {
     h('div', { class: 'tiles' }, tiles.map(([n, l, c, show, who]) => h('button', { class: 'tile', type: 'button', 'aria-label': `${l}: ${n}. Ro'yxatni ochish`,
       onclick: () => { F.show = show; F.who = who; F.q = ''; go('#/ishlar'); } }, h('b', { class: c }, n), h('span', {}, l)))),
     barokat && h('div', { class: 'banner' }, 'Barokatli kun bo\'ldi'),
-    me.kind === 'rahbar' ? [waitingBlock, theirsBlock, mineBlock] : [waitingBlock, mineBlock, theirsBlock],
+    me.kind === 'rahbar' ? [waitingBlock, HomePlan(), theirsBlock, mineBlock] : [waitingBlock, HomePlan(), mineBlock, theirsBlock],
     h('a', { class: 'fab', href: '#/ishlar/yangi', 'aria-label': 'Yangi topshiriq' }, icon('plus', 24, '#fff', 2.5)));
 }
 
@@ -271,6 +263,8 @@ export function TaskDetail(id) {
   if (t.status === 'tekshiruvda' && iGave && !mineToDo) actions.push(h('button', { class: 'btn', onclick: () => acceptResult(t) }, 'Qabul qilish'), h('button', { class: 'btn ghost', onclick: () => returnTask(t) }, 'Qaytarish'));
 
   const manage = [];
+  if (isOpen(t) && mineToDo && !iGave) manage.push(h('button', { class: 'btn ghost small', onclick: () => askReschedule(t) }, 'Muddatni ko\'chirish'));
+  if (isOpen(t) && other()) manage.push(h('button', { class: 'btn ghost small', onclick: () => askDecision(t) }, 'Qaror so\'rash'));
   if (isOpen(t) && iGave) manage.push(h('a', { class: 'btn ghost small', href: `#/ish/${t.id}/tahrir` }, 'Tahrirlash'));
   if (isOpen(t) && iGave) manage.push(h('button', { class: 'btn ghost small', onclick: async () => { if (await confirmBox({ title: 'Bekor qilinsinmi?', text: 'Topshiriq tarixda «Bekor qilindi» bo\'lib qoladi.', ok: 'Bekor qilish' })) updateTask(t.id, { status: 'bekor', closed_at: new Date().toISOString() }, 'Bekor qilindi'); } }, 'Bekor qilish'));
   if (iGave || S.me.is_admin) manage.push(h('button', { class: 'btn danger small', onclick: async () => { if (await confirmBox({ title: 'Savatga tashlansinmi?', text: '30 kun ichida qaytarib olsa bo\'ladi.', ok: 'Savatga', danger: true })) { if (await updateTask(t.id, { deleted_at: new Date().toISOString(), deleted_by: me }, 'Savatga tashlandi')) go('#/ishlar'); } } }, 'O\'chirish'));
@@ -345,13 +339,16 @@ function eventText(r) {
 
 // ---------- Tasdiq ----------
 export function Approvals() {
+  const reqs = pendingForMe();
   const rows = needsMe().sort(byDue);
-  const sent = S.tasks.filter((t) => t.status === 'tekshiruvda' && t.assignee_id === S.me.id && t.creator_id !== S.me.id);
+  const sentTasks = S.tasks.filter((t) => t.status === 'tekshiruvda' && t.assignee_id === S.me.id && t.creator_id !== S.me.id);
+  const sent = mySentRequests();
+  const waitingSent = sent.filter((r) => r.status === 'kutilmoqda'), answered = sent.filter((r) => r.status !== 'kutilmoqda').slice(0, 15);
   return h('main', { class: 'view' },
-    Head('Javob kutayotgan ishlar', 'Tasdiq'),
-    rows.length ? rows.map(WaitCard) : Empty('Javob kutayotgan ish yo\'q', 'Sizdan hech narsa so\'ralmagan.'),
-    sent.length ? [h('div', { class: 'section' }, h('h2', {}, 'Men yuborganlar, javob kutilmoqda')), sent.map(TaskCard)] : null,
-    h('div', { class: 't-meta', style: 'padding:4px' }, 'Qaror so\'rash, muddatni ko\'chirish va hisobot tasdig\'i keyingi bosqichda qo\'shiladi.'));
+    Head('Javob kutayotgan ishlar', 'Tasdiq', h('button', { class: 'btn pill small', onclick: () => askDecision(null) }, '+ Qaror so\'rash')),
+    reqs.length + rows.length ? [reqs.map(RequestCard), rows.map(WaitCard)] : Empty('Javob kutayotgan ish yo\'q', 'Sizdan hech narsa so\'ralmagan.'),
+    waitingSent.length + sentTasks.length ? [h('div', { class: 'section' }, h('h2', {}, 'Men yuborganlar, javob kutilmoqda')), waitingSent.map(SentCard), sentTasks.map(TaskCard)] : null,
+    answered.length ? [h('div', { class: 'section' }, h('h2', {}, 'Javob berilganlar')), answered.map(SentCard)] : null);
 }
 
 // ---------- Hali tayyor bo'lmagan bo'limlar ----------

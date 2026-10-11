@@ -166,3 +166,47 @@ export async function notify(userId, kind, title, body, refId) {
   if (!userId || userId === S.me.id) return;
   await sb.from('notifications').insert({ user_id: userId, kind, title, body, ref_type: 'task', ref_id: refId });
 }
+
+// ---------- Umumiy ekran bo'laklari ----------
+export const go = (hash) => { location.hash = hash; };
+export function Head(sub, title, right) {
+  return h('header', { class: 'head' }, h('div', {}, h('div', { class: 'sub' }, sub), h('h1', {}, title)), right);
+}
+export function BackHead(title, to = '#/ishlar') {
+  return h('header', { class: 'head', style: 'padding-top:14px' },
+    h('div', {}, h('button', { class: 'back', type: 'button', onclick: () => go(to) }, icon('back', 20), 'Orqaga'), h('h1', { style: 'font-size:22px' }, title)));
+}
+export function Empty(title, text) { return h('div', { class: 'empty' }, h('b', {}, title), text); }
+
+// ---------- Sana (qo'shimcha) ----------
+export const addDays = (s, n) => { const d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() + n); return iso(d); };
+export const mondayOf = (s) => addDays(s, -((new Date(s + 'T12:00:00').getDay() + 6) % 7));
+export const monthStart = (s) => s.slice(0, 8) + '01';
+export const monthEnd = (s) => { const d = new Date(s.slice(0, 8) + '01T12:00:00'); d.setMonth(d.getMonth() + 1); d.setDate(0); return iso(d); };
+export function fmtDay(s) { const d = new Date(s + 'T12:00:00'); return `${d.getDate()}-${OY[d.getMonth()]}, ${HAFTA[d.getDay()].toLowerCase()}`; }
+export const monthName = (s) => { const d = new Date(s + 'T12:00:00'); return `${OY[d.getMonth()]} ${d.getFullYear()}`; };
+export const hhmm = (d = new Date()) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+// ---------- Reja, hisobot, so'rovlar ----------
+S.plan = []; S.requests = []; S.reports = [];
+/** Reja va hisobot egasi: yordamchi. Tasdiqlovchi: ikkinchi kishi. */
+export const owner = () => S.profiles.find((p) => p.kind === 'yordamchi') || S.me;
+export const approverOf = (id) => S.profiles.find((p) => p.id !== id) || null;
+
+export async function loadPlan() {
+  const { data, error } = await sb.from('plan_items').select('*').gte('plan_date', addDays(today(), -62)).order('plan_date');
+  if (!error) S.plan = data || [];
+}
+export async function loadRequests() {
+  const { data, error } = await sb.from('requests').select('*').order('created_at', { ascending: false }).limit(300);
+  if (!error) S.requests = data || [];
+}
+export async function loadReports() {
+  const { data, error } = await sb.from('reports').select('*').order('period_start', { ascending: false }).limit(300);
+  if (!error) S.reports = data || [];
+}
+export async function loadAll() { await Promise.all([loadTasks(), loadPlan(), loadRequests(), loadReports()]); }
+export async function ping(userId, kind, title, body, refType, refId) {
+  if (!userId || userId === S.me.id) return;
+  await sb.from('notifications').insert({ user_id: userId, kind, title, body, ref_type: refType, ref_id: refId });
+}

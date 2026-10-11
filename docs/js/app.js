@@ -1,4 +1,5 @@
-import { sb, S, bus, h, icon, loadBase, loadTasks, toast } from './core.js';
+import { sb, S, bus, h, icon, loadBase, loadTasks, loadAll, toast } from './core.js';
+import { ReportsView, ReportDetail, pendingForMe } from './plan.js';
 import { Login, NoProfile, Home, Tasks, TaskForm, TaskDetail, Approvals, Soon, More, Trash, needsMe } from './views.js';
 
 const app = document.getElementById('app');
@@ -9,7 +10,7 @@ const NAV = [
 ];
 
 function Nav(active) {
-  const n = needsMe().length;
+  const n = needsMe().length + pendingForMe().length;
   return h('nav', { class: 'nav', 'aria-label': 'Asosiy menyu' }, h('div', { class: 'in' },
     NAV.map(([href, label, ic]) => h('a', { href, class: href === active ? 'on' : '', 'aria-current': href === active ? 'page' : null },
       icon(ic), label, href === '#/tasdiq' && n > 0 ? h('span', { class: 'badge' }, n) : null))));
@@ -25,7 +26,8 @@ function route() {
   if ((m = hash.match(/^#\/ish\/([0-9a-f-]+)$/))) return [TaskDetail(m[1]), '#/ishlar'];
   if (hash === '#/taqvim') return [Soon('Taqvim', 'Uchrashuvlar va muddatlar taqvimi keyingi bosqichda qo\'shiladi.'), hash];
   if (hash === '#/tasdiq') return [Approvals(), hash];
-  if (hash === '#/hisobot') return [Soon('Hisobot', 'Kunlik reja, kechki hisobot va statistika keyingi bosqichda qo\'shiladi.'), hash];
+  if (hash === '#/hisobot') return [ReportsView(), hash];
+  if ((m = hash.match(/^#\/hisobot\/([0-9a-f-]+)$/))) return [ReportDetail(m[1]), '#/hisobot'];
   if (hash === '#/yana') return [More(), hash];
   if (hash === '#/savat') return [Trash(), '#/yana'];
   location.hash = '#/bugun';
@@ -46,17 +48,27 @@ function render() {
 bus.render = render;
 window.addEventListener('hashchange', render);
 
+/** Foydalanuvchi yozayotgan yoki oyna ochiq bo'lsa, ekranni o'zidan-o'zi yangilamaymiz. */
+function busy() {
+  if (document.querySelector('.overlay')) return true;
+  const el = document.activeElement;
+  return !!el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) && el.type !== 'checkbox';
+}
 let channel = null;
 async function start(session) {
+  // Hisobdan chiqilganda sahifani to'liq yangilaymiz: oldingi foydalanuvchining filtrlari va ma'lumoti xotirada qolmasin.
+  if (!session && S.session) { history.replaceState(null, '', '#/bugun'); location.reload(); return; }
   S.session = session; ready = false;
   if (!session) { if (channel) { sb.removeChannel(channel); channel = null; } S.me = null; S.tasks = []; history.replaceState(null, '', '#/bugun'); render(); return; }
-  try { await loadBase(); if (S.me) await loadTasks(); }
+  try { await loadBase(); if (S.me) await loadAll(); }
   catch (e) { toast('Ma\'lumotni yuklab bo\'lmadi. Internetni tekshiring.'); }
   ready = true; render();
   if (S.me && !channel) {
     let timer;
-    const refresh = () => { clearTimeout(timer); timer = setTimeout(async () => { await loadTasks(); const el = document.activeElement; if (!el || !['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) render(); }, 400); };
-    channel = sb.channel('devon-tasks').on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, refresh).subscribe();
+    const refresh = () => { clearTimeout(timer); timer = setTimeout(async () => { await loadAll(); if (!busy()) render(); }, 400); };
+    channel = sb.channel('devon-data');
+    for (const table of ['tasks', 'plan_items', 'requests', 'reports']) channel.on('postgres_changes', { event: '*', schema: 'public', table }, refresh);
+    channel.subscribe();
   }
 }
 
@@ -70,5 +82,5 @@ sb.auth.onAuthStateChange((_event, session) => {
 });
 
 document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState === 'visible' && S.me) { await loadTasks(); const el = document.activeElement; if (!el || !['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) render(); }
+  if (document.visibilityState === 'visible' && S.me) { await loadAll(); if (!busy()) render(); }
 });
