@@ -9,7 +9,9 @@ const inRange = (d, a, b) => d && d >= a && d <= b;
 // ---------- Kichik shakl oynasi ----------
 function sheetForm({ title, fields, ok = 'Yuborish' }) {
   return new Promise((resolve) => {
-    const els = fields.map((f) => (f.type === 'textarea'
+    const els = fields.map((f) => (f.type === 'select'
+      ? (() => { const el = h('select', { class: 'input', id: 'sf_' + f.id }, f.options.map(([v, l]) => h('option', { value: v }, l))); el.value = f.value; return el; })()
+      : f.type === 'textarea'
       ? h('textarea', { class: 'input', id: 'sf_' + f.id, value: f.value || '', placeholder: f.placeholder || '' })
       : h('input', { class: 'input', id: 'sf_' + f.id, type: f.type || 'text', value: f.value || '', min: f.min, placeholder: f.placeholder || '' })));
     const err = h('div', { class: 'err' });
@@ -209,17 +211,12 @@ const ownItems = (date) => planItems(date).filter((i) => forOf(i) === owner().id
 const P = { who: 'all', last: null };
 const tag = (i) => (forOf(i) !== owner().id ? ` (${nameOf(forOf(i), true)})` : '');
 const line = (i) => `${i.at_time ? i.at_time.slice(0, 5) + ' ' : ''}${i.title}${tag(i)}`;
-async function switchOwner(i) {
-  const next = S.profiles.find((p) => p.id !== forOf(i)); if (!next) return;
-  const { error } = await sb.from('plan_items').update({ for_id: next.id }).eq('id', i.id);
-  if (error) { toast('Saqlab bo\'lmadi'); return; }
-  await loadPlan(); toast(`Endi ${nameOf(next.id, true)}niki`); bus.render();
-}
 async function editItem(i) {
   const v = await sheetForm({ title: 'Bandni tahrirlash', ok: 'Saqlash', fields: [
-    { id: 'title', label: 'Matn', required: true, value: i.title }, { id: 'time', label: 'Vaqt', type: 'time', value: i.at_time ? i.at_time.slice(0, 5) : '' }] });
+    { id: 'title', label: 'Matn', required: true, value: i.title }, { id: 'time', label: 'Vaqt', type: 'time', value: i.at_time ? i.at_time.slice(0, 5) : '' },
+    { id: 'who', label: 'Kimniki', type: 'select', value: forOf(i), options: S.profiles.map((p) => [p.id, p.id === S.me.id ? 'Meniki' : nameOf(p.id, true)]) }] });
   if (!v) return;
-  const { error } = await sb.from('plan_items').update({ title: v.title, at_time: v.time || null }).eq('id', i.id);
+  const { error } = await sb.from('plan_items').update({ title: v.title, at_time: v.time || null, for_id: v.who }).eq('id', i.id);
   if (error) { toast('Saqlab bo\'lmadi'); return; }
   await loadPlan(); bus.render();
 }
@@ -240,13 +237,11 @@ function PlanList(date, editable, canAdd = false) {
     return h('div', { class: 'planrow' },
       h('label', { class: 'check', style: 'flex:1;min-width:0' },
         h('input', { type: 'checkbox', checked: i.done, disabled: !canTick, onchange: () => togglePlan(i) }),
+        h('span', { class: 'ptime' }, i.at_time ? i.at_time.slice(0, 5) : '—'),
         h('span', { style: 'flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding:8px 0' },
           h('span', { style: `overflow-wrap:anywhere;${i.done ? 'text-decoration:line-through;color:var(--muted)' : ''}` }, i.title),
           h('span', { class: 'pmeta' },
-            i.at_time && h('b', {}, i.at_time.slice(0, 5)),
-            editable
-              ? h('button', { type: 'button', class: 'who tapwho ' + (forOf(i) === owner().id ? 'a' : 'b'), 'aria-label': `Egasi: ${nameOf(forOf(i), true)}. Almashtirish`, onclick: (e) => { e.preventDefault(); switchOwner(i); } }, nameOf(forOf(i), true), ' ⇄')
-              : h('span', { class: 'who ' + (forOf(i) === owner().id ? 'a' : 'b') }, nameOf(forOf(i), true)),
+            h('span', { class: 'who ' + (forOf(i) === owner().id ? 'a' : 'b') }, nameOf(forOf(i), true)),
             i.added_by && i.added_by !== i.owner_id && h('span', { style: 'color:var(--blue);font-weight:600' }, `${nameOf(i.added_by, true)} qo'shdi`),
             i.added_after_approval && h('span', {}, 'tasdiqdan keyin'), task && h('span', {}, `№${task.seq}`)))),
       editable && h('button', { class: 'xbtn sm', type: 'button', 'aria-label': `«${i.title}» bandini tahrirlash`, onclick: () => editItem(i) }, icon('edit', 18)),

@@ -169,3 +169,5 @@ button.who.tapwho { border: none; cursor: pointer; font-family: inherit; min-hei
 .pmeta .who { margin-left: 0; }
 .xbtn.sm { width: 40px; color: var(--muted); display: flex; align-items: center; justify-content: center; }
 .planrow .check { align-items: flex-start; } .planrow .check input { margin-top: 10px; flex: none; }
+
+.planrow .ptime { margin-top: 9px; }
