@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="w_plan">Devon: bugungi reja</string>
+    <string name="w_plan">Bugungi reja</string>
     <string name="w_plan_desc">Bugungi reja bandlari. Doirachani bosib belgilaysiz.</string>
+    <string name="w_tasks">Topshiriqlar</string>
+    <string name="w_tasks_desc">Ochiq topshiriqlar, muddati yaqini tepada.</string>
+    <string name="w_rem">Eslatmalar</string>
+    <string name="w_rem_desc">Eng yaqin eslatmalar.</string>
+    <string name="w_cal">Taqvim</string>
+    <string name="w_cal_desc">Joriy oy: muddat, uchrashuv va eslatma belgilari bilan.</string>
 </resources>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/w_cal_desc"
+    android:initialLayout="@layout/widget_cal"
+    android:previewLayout="@layout/widget_cal"
+    android:minWidth="250dp" android:minHeight="250dp"
+    android:minResizeWidth="180dp" android:minResizeHeight="110dp"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

@@ -60,7 +60,7 @@ public class Sync extends Worker {
         Api.Result r = Api.call(c, item == null ? "sync" : "toggle", item);
         if (r.code == 401) { // qurilma uzilgan yoki hisobdan chiqilgan
             Store.clear(c);
-            PlanWidget.refresh(c);
+            Widgets.refreshAll(c);
             return Result.success();
         }
         if (r.code != 200) return item == null ? Result.success() : Result.retry();
@@ -70,7 +70,7 @@ public class Sync extends Worker {
             if (ns != null) for (int i = 0; i < ns.length(); i++) show(c, ns.getJSONObject(i));
             j.remove("notifications");
             Store.saveSnapshot(c, j.toString());
-            PlanWidget.refresh(c);
+            Widgets.refreshAll(c);
         } catch (Exception e) { /* javob buzilgan bo'lsa, keyingi safar */ }
         return Result.success();
     }

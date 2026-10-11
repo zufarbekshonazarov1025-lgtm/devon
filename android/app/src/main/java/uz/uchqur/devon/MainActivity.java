@@ -177,11 +177,11 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface public void registered() { Store.setRegistered(MainActivity.this, true); Sync.now(MainActivity.this); }
 
-        @JavascriptInterface public void signedOut() { Store.clear(MainActivity.this); PlanWidget.refresh(MainActivity.this); }
+        @JavascriptInterface public void signedOut() { Store.clear(MainActivity.this); Widgets.refreshAll(MainActivity.this); }
 
         @JavascriptInterface public void sync() { if (Store.registered(MainActivity.this)) Sync.now(MainActivity.this); }
 
-        @JavascriptInterface public int version() { return 2; }
+        @JavascriptInterface public int version() { return 3; }
     }
 
     private void openOutside(Uri uri) {
