@@ -134,6 +134,12 @@ async function eventForm(e, date) {
   await loadExtra(); C.date = v.date; C.mode = 'kun'; toast('Saqlandi'); bus.render();
 }
 
+/** Taqvimda surish: keyingi yoki oldingi kun, hafta yoki oy. */
+export function calShift(dir) {
+  const d = C.date || today();
+  C.date = C.mode === 'kun' ? addDays(d, dir) : C.mode === 'hafta' ? addDays(d, dir * 7) : (dir > 0 ? addDays(monthEnd(d), 1) : monthStart(addDays(monthStart(d), -1)));
+  bus.render();
+}
 export function Calendar() {
   const d = C.date || today();
   const seg = (val, label) => h('button', { type: 'button', class: C.mode === val ? 'on' : '', 'aria-pressed': String(C.mode === val), onclick: () => { C.mode = val; bus.render(); } }, label);

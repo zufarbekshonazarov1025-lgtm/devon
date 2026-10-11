@@ -1,6 +1,6 @@
 import { sb, S, bus, h, icon, loadBase, loadTasks, loadAll, toast, countUp } from './core.js';
 import { ReportsView, ReportDetail, pendingForMe } from './plan.js';
-import { loadExtra, runRecurrences, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
+import { loadExtra, runRecurrences, calShift, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
 import { Login, NoProfile, Home, Tasks, TaskForm, TaskDetail, Approvals, Soon, More, Trash, needsMe } from './views.js';
 
 const app = document.getElementById('app');
@@ -49,10 +49,11 @@ app.addEventListener('touchstart', (e) => {
   touch = e.touches.length === 1 && !scrollsSideways(e.target) && !e.target.closest('input[type=range], textarea') ? { x: t.clientX, y: t.clientY, at: Date.now() } : null;
 }, { passive: true });
 app.addEventListener('touchend', (e) => {
-  if (!touch || document.querySelector('.overlay') || location.hash === '#/taqvim') { touch = null; return; }
+  if (!touch || document.querySelector('.overlay')) { touch = null; return; }
   const t = e.changedTouches[0], dx = t.clientX - touch.x, dy = t.clientY - touch.y, quick = Date.now() - touch.at < 700;
   touch = null;
   if (!quick || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 2) return;
+  if (location.hash === '#/taqvim') { calShift(dx < 0 ? 1 : -1); document.querySelector('.view > .card, .view > .callist, .view > .empty')?.classList.add(dx < 0 ? 'slideL' : 'slideR'); return; }
   const i = NAV.findIndex(([href]) => href === (location.hash || '#/bugun'));
   const next = i < 0 ? null : NAV[i + (dx < 0 ? 1 : -1)];
   if (!next) return;
