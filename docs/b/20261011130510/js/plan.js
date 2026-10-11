@@ -367,12 +367,15 @@ function DailyTab() {
   const req = rep && pendingForMe().find((r) => r.report_id === rep.id);
   const chip = (val, label) => h('button', { class: 'fchip' + (d === val ? ' on' : ''), type: 'button', 'aria-pressed': String(d === val), onclick: () => { R.date = val; bus.render(); } }, label);
   const canSend = mine && planItems(d).length > 0 && (!rep || rep.status === 'qoralama' || rep.status === 'qaytarildi');
-  const archive = S.reports.filter((r) => r.owner_id === owner().id && r.doc_type === 'hisobot' && r.period === 'kunlik' && r.status !== 'qoralama' && r.period_start !== today()).slice(0, 14);
+  const archive = S.reports.filter((r) => r.owner_id === owner().id && r.period === 'kunlik' && r.status !== 'qoralama' && !(r.doc_type === 'hisobot' && r.period_start === today()))
+    .sort((x, y) => y.period_start.localeCompare(x.period_start) || x.doc_type.localeCompare(y.doc_type)).slice(0, 30);
+  const stName = (r) => r.status === 'tasdiqlandi' ? 'Tasdiqlandi' : r.status === 'qaytarildi' ? 'Qaytarildi' : 'Tasdiq kutilmoqda';
 
   return [
     h('div', { class: 'filters' }, chip(addDays(today(), -1), 'Kecha'), chip(today(), 'Bugun'), chip(addDays(today(), 1), 'Ertaga')),
     h('section', { class: 'card' },
       h('div', { class: 'between' }, h('b', {}, `Reja · ${fmtDay(d)}`), docChip(rep)),
+      rep && rep.status !== 'qoralama' && h('a', { href: `#/hisobot/${rep.id}`, class: 't-meta', style: 'font-weight:700;color:var(--brand);min-height:44px;display:flex;align-items:center;gap:2px' }, 'Yuborilgan rejani ochish', icon('next', 16)),
       rep && rep.status === 'qaytarildi' && rep.approver_comment && h('div', { class: 'banner', style: 'background:var(--red-tint);color:var(--red)' }, 'Qaytarildi: ' + rep.approver_comment),
       PlanList(d, mine && d >= today()),
       mine && d >= today() && yUndone.length > 0 && h('button', { class: 'btn ghost', onclick: async () => {
@@ -385,8 +388,8 @@ function DailyTab() {
         h('button', { class: 'btn', onclick: () => respond(req, true, null) }, 'Rejani tasdiqlash'),
         h('button', { class: 'btn ghost', onclick: async () => { const v = await ask({ title: 'Izoh yozing', label: 'Nimani o\'zgartirish kerak', ok: 'Yuborish' }); if (v != null) respond(req, false, v); } }, 'Izoh yozish'))),
     d <= today() ? ReportCard({ period: 'kunlik', start: d, end: d, title: `Kechki hisobot · ${fmtDay(d)}`, generate: () => genDaily(d) }) : null,
-    archive.length ? [h('div', { class: 'section' }, h('h2', {}, 'Oldingi hisobotlar')),
-      h('div', { class: 'list' }, archive.map((r) => h('a', { href: `#/hisobot/${r.id}` }, h('span', {}, h('b', {}, fmtDay(r.period_start)), h('small', {}, r.status === 'tasdiqlandi' ? 'Tasdiqlandi' : r.status === 'qaytarildi' ? 'Qaytarildi' : 'Tasdiq kutilmoqda', r.on_time === false ? ' · kechikib' : '')), icon('next', 18, '#56645F'))))] : null,
+    archive.length ? [h('div', { class: 'section' }, h('h2', {}, 'Rejalar va hisobotlar tarixi')),
+      h('div', { class: 'list' }, archive.map((r) => h('a', { href: `#/hisobot/${r.id}` }, h('span', {}, h('b', {}, `${r.doc_type === 'reja' ? 'Reja' : 'Hisobot'} · ${fmtDay(r.period_start)}`), h('small', {}, stName(r), r.on_time === false ? ' · kechikib' : '')), icon('next', 18, '#56645F'))))] : null,
   ];
 }
 
@@ -447,6 +450,9 @@ export function ReportDetail(id) {
     h('section', { class: 'card' },
       h('div', { class: 'between' }, h('b', {}, docPeriod(r)), docChip(r)),
       h('div', { class: 'text' }, r.body || ''),
+      r.doc_type === 'reja' && r.period === 'kunlik' && planItems(r.period_start).length > 0 && h('div', {},
+        h('div', { class: 't-meta', style: 'margin-bottom:4px' }, 'Hozirgi holati'),
+        planItems(r.period_start).map((i) => h('div', { class: 'text', style: i.done ? 'color:var(--brand-dark)' : '' }, `${i.done ? '✓' : '○'} ${i.at_time ? i.at_time.slice(0, 5) + ' ' : ''}${i.title}${i.added_after_approval ? ' (tasdiqdan keyin)' : ''}`))),
       h('div', { class: 't-meta' }, `Yuborilgan: ${fmtDateTime(r.sent_at)}${r.on_time === false ? ' · kechikib' : ''}`),
       r.approved_at && h('div', { class: 't-meta' }, `Tasdiqlagan: ${nameOf(r.approver_id, true)} · ${fmtDateTime(r.approved_at)}`),
       r.approver_comment && h('div', {}, h('div', { class: 't-meta' }, 'Izoh'), h('div', { class: 'text' }, r.approver_comment)),
