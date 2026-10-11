@@ -208,7 +208,7 @@ async function togglePlan(i) {
   if (error) { toast('Saqlab bo\'lmadi'); return; }
   await loadPlan(); bus.render();
 }
-function PlanList(date, editable) {
+function PlanList(date, editable, canAdd = false) {
   const items = planItems(date);
   const approved = findDoc('reja', 'kunlik', date)?.status === 'tasdiqlandi';
   const rows = items.map((i) => {
@@ -218,13 +218,13 @@ function PlanList(date, editable) {
         h('input', { type: 'checkbox', checked: i.done, disabled: !editable, onchange: () => togglePlan(i) }),
         h('span', { class: 'ptime' }, i.at_time ? i.at_time.slice(0, 5) : '—'),
         h('span', { style: `flex:1;min-width:0;overflow-wrap:anywhere;${i.done ? 'text-decoration:line-through;color:var(--muted)' : ''}` },
-          i.title, i.added_after_approval && h('span', { class: 't-meta' }, ' · tasdiqdan keyin'), task && h('span', { class: 't-meta' }, ` · №${task.seq}`))),
-      editable && h('button', { class: 'xbtn', type: 'button', 'aria-label': `«${i.title}» bandini o'chirish`, onclick: async () => {
+          i.title, i.added_by && i.added_by !== i.owner_id && h('span', { class: 't-meta', style: 'color:var(--blue);font-weight:600' }, ` · ${nameOf(i.added_by, true)} qo'shdi`), i.added_after_approval && h('span', { class: 't-meta' }, ' · tasdiqdan keyin'), task && h('span', { class: 't-meta' }, ` · №${task.seq}`))),
+      (editable || (canAdd && i.added_by === S.me.id)) && h('button', { class: 'xbtn', type: 'button', 'aria-label': `«${i.title}» bandini o'chirish`, onclick: async () => {
         const { error } = await sb.from('plan_items').delete().eq('id', i.id);
         if (error) { toast('O\'chirib bo\'lmadi'); return; } await loadPlan(); bus.render();
       } }, '×'));
   });
-  if (!editable) return h('div', {}, rows.length ? rows : h('div', { class: 't-meta' }, 'Reja bandlari kiritilmagan.'));
+  if (!editable && !canAdd) return h('div', {}, rows.length ? rows : h('div', { class: 't-meta' }, 'Reja bandlari kiritilmagan.'));
 
   const time = h('input', { class: 'input', type: 'time', 'aria-label': 'Vaqt', style: 'width:112px;flex:none' });
   const title = h('input', { class: 'input', 'aria-label': 'Reja bandi', placeholder: 'Yangi band', maxlength: 200 });
@@ -234,13 +234,14 @@ function PlanList(date, editable) {
   const add = async (e) => {
     e.preventDefault();
     const v = title.value.trim(); if (!v) { title.focus(); return; }
-    const { error } = await sb.from('plan_items').insert({ owner_id: S.me.id, plan_date: date, at_time: time.value || null, title: v, task_id: link.value || null, added_after_approval: approved, sort: items.length });
+    const { error } = await sb.from('plan_items').insert({ owner_id: owner().id, added_by: S.me.id, plan_date: date, at_time: time.value || null, title: v, task_id: editable ? (link.value || null) : null, added_after_approval: approved, sort: items.length });
     if (error) { toast('Qo\'shib bo\'lmadi: ' + error.message); return; }
+    if (!editable) ping(owner().id, 'reja', 'Rejangizga band qo\'shildi', v, 'plan', null);
     await loadPlan(); bus.render();
   };
   return h('div', {}, rows.length ? rows : h('div', { class: 't-meta', style: 'padding:6px 0' }, 'Hali band yo\'q. Birinchisini qo\'shing.'),
     h('form', { onsubmit: add, style: 'display:flex;flex-direction:column;gap:8px;margin-top:10px' },
-      h('div', { class: 'row' }, time, title), myOpen.length ? link : null,
+      h('div', { class: 'row' }, time, title), editable && myOpen.length ? link : null,
       h('button', { class: 'btn ghost', type: 'submit' }, '+ Band qo\'shish')));
 }
 
@@ -389,7 +390,7 @@ function DailyTab() {
       h('div', { class: 'between' }, h('b', {}, `Reja · ${fmtDay(d)}`), docChip(rep)),
       rep && rep.status !== 'qoralama' && h('a', { href: `#/hisobot/${rep.id}`, class: 't-meta', style: 'font-weight:700;color:var(--brand);min-height:44px;display:flex;align-items:center;gap:2px' }, 'Yuborilgan rejani ochish', icon('next', 16)),
       rep && rep.status === 'qaytarildi' && rep.approver_comment && h('div', { class: 'banner', style: 'background:var(--red-tint);color:var(--red)' }, 'Qaytarildi: ' + rep.approver_comment),
-      PlanList(d, mine && d >= today()),
+      PlanList(d, mine && d >= today(), !mine && d >= today()),
       mine && d >= today() && yUndone.length > 0 && h('button', { class: 'btn ghost', onclick: async () => {
         const rows = yUndone.map((i, n) => ({ owner_id: S.me.id, plan_date: d, at_time: i.at_time, title: i.title, task_id: i.task_id, carried_from: i.id, sort: 100 + n, added_after_approval: rep?.status === 'tasdiqlandi' }));
         const { error } = await sb.from('plan_items').insert(rows);
