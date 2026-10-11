@@ -1,8 +1,8 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
-export const SUPABASE_URL = 'https://wjqxqswmpxsaodcnjsrf.supabase.co';
+const SUPABASE_URL = 'https://wjqxqswmpxsaodcnjsrf.supabase.co';
 // Ochiq (publishable) kalit: brauzerda turishi uchun mo'ljallangan, ma'lumotni RLS himoya qiladi.
-export const SUPABASE_KEY = 'sb_publishable_wLaaHsyI1x2ZckLedH9T-g_eoq8qEwC';
+const SUPABASE_KEY = 'sb_publishable_wLaaHsyI1x2ZckLedH9T-g_eoq8qEwC';
 
 export const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 

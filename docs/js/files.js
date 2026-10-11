@@ -1,4 +1,4 @@
-import { sb, S, bus, h, icon, toast, confirmBox, fmtDateTime, nameOf, loadBase, SUPABASE_URL, SUPABASE_KEY } from './core.js';
+import { sb, S, bus, h, icon, toast, confirmBox, fmtDateTime, nameOf, loadBase } from './core.js';
 
 /** Server funksiyasini chaqiradi. Xato bo'lsa, o'zbekcha matnini qaytaradi. */
 async function call(body) {
@@ -23,65 +23,6 @@ function put(url, file, onProgress) {
 }
 
 /** Topshiriq ichidagi «Hujjatlar» bo'limi. */
-// ---------- Faylni dastur ichida ko'rish ----------
-const OFFICE = ['doc', 'docx', 'odt', 'rtf', 'txt', 'xls', 'xlsx', 'ods', 'csv', 'ppt', 'pptx', 'odp'];
-/** 'rasm' | 'pdf' | 'ofis' | null (dastur ichida ko'rsatib bo'lmaydi) */
-function kindOf(a) {
-  const mime = a.mime || '', ext = (a.name.split('.').pop() || '').toLowerCase();
-  if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext)) return 'rasm';
-  if (mime === 'application/pdf' || ext === 'pdf') return 'pdf';
-  return OFFICE.includes(ext) ? 'ofis' : null;
-}
-let pdfjs = null;
-async function loadPdfjs() {
-  if (!pdfjs) {
-    pdfjs = await import(new URL('vendor/pdfjs/pdf.min.mjs', document.baseURI).href);
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL('vendor/pdfjs/pdf.worker.min.mjs', document.baseURI).href;
-  }
-  return pdfjs;
-}
-async function openFile(a) {
-  const kind = kindOf(a);
-  const body = h('div', { class: 'vbody' }, h('div', { class: 'vwait' }, h('span', { class: 'spin', 'aria-hidden': 'true' }), kind === 'ofis' ? 'Hujjat ko\'rishga tayyorlanmoqda. Birinchi marta bir necha soniya oladi…' : 'Ochilmoqda…'));
-  let closed = false, url = null, zoom = 1;
-  const close = () => { closed = true; ov.remove(); if (url) URL.revokeObjectURL(url); };
-  const setZoom = (z) => { zoom = Math.min(3, Math.max(1, z)); body.style.setProperty('--z', zoom); zlabel.textContent = Math.round(zoom * 100) + '%'; };
-  const zlabel = h('span', { class: 'vz' }, '100%');
-  const ov = h('div', { class: 'overlay viewer', role: 'dialog', 'aria-modal': 'true', 'aria-label': a.name },
-    h('div', { class: 'vhead' },
-      h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Yopish', onclick: close }, icon('back', 20)),
-      h('b', { class: 'vname' }, a.name),
-      h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Kichraytirish', onclick: () => setZoom(zoom - 0.5) }, '−'), zlabel,
-      h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Kattalashtirish', onclick: () => setZoom(zoom + 0.5) }, '+')),
-    body,
-    h('div', { class: 'vfoot' }, h('a', { class: 'btn ghost small', href: a.url, target: '_blank', rel: 'noopener' }, 'Drive\'da ochish'), h('button', { class: 'btn small', type: 'button', onclick: close }, 'Yopish')));
-  document.body.append(ov);
-  const failed = (msg) => { if (!closed) body.replaceChildren(h('div', { class: 'vwait' }, h('b', {}, 'Ochib bo\'lmadi'), msg, h('a', { class: 'btn', href: a.url, target: '_blank', rel: 'noopener' }, 'Drive\'da ochish'))); };
-  try {
-    const r = await fetch(`${SUPABASE_URL}/functions/v1/fayl`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${S.session ? S.session.access_token : ''}` }, body: JSON.stringify({ attachment_id: a.id }) });
-    if (!r.ok) { let m = 'Server javob bermadi.'; try { m = (await r.json()).error || m; } catch (e) { /* matn yo'q */ } failed(m); return; }
-    const blob = await r.blob();
-    if (closed) return;
-    if (kind === 'rasm') {
-      url = URL.createObjectURL(blob);
-      body.replaceChildren(h('img', { class: 'vimg', src: url, alt: a.name }));
-      return;
-    }
-    const lib = await loadPdfjs();
-    const doc = await lib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
-    if (closed) return;
-    const pages = h('div', { class: 'vpages' }); body.replaceChildren(pages);
-    const total = doc.numPages, max = Math.min(total, 80), dpr = Math.min(2, window.devicePixelRatio || 1), width = Math.max(320, body.clientWidth - 16);
-    for (let n = 1; n <= max && !closed; n++) {
-      const page = await doc.getPage(n), base = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: (width / base.width) * dpr });
-      const canvas = h('canvas', { class: 'vpage', width: Math.floor(vp.width), height: Math.floor(vp.height), 'aria-label': `${n}-sahifa` });
-      pages.append(canvas);
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-    }
-    pages.append(h('div', { class: 't-meta', style: 'text-align:center;padding:8px' }, total > max ? `Birinchi ${max} sahifa ko'rsatildi (jami ${total}). To'lig'ini Drive'da oching.` : `Jami ${total} sahifa`));
-  } catch (e) { failed('Faylni ko\'rsatishda xato: ' + (e && e.message ? e.message : 'noma\'lum')); }
-}
-
 /** Davom etayotgan yuklashlar: topshiriq id → { text, k }. Ekran qayta chizilsa ham yo'qolmaydi. */
 const UP = new Map();
 function paint(taskId) {
@@ -126,7 +67,7 @@ export function Files(t) {
     const { data } = await sb.from('attachments').select('*').eq('task_id', t.id).order('created_at');
     const rows = data || [];
     list.replaceChildren(...(rows.length ? rows.map((a) => h('div', { class: 'filerow' },
-      h(kindOf(a) ? 'button' : 'a', kindOf(a) ? { type: 'button', class: 'filelink plainbtn', onclick: () => openFile(a) } : { href: a.url, target: '_blank', rel: 'noopener', class: 'filelink' }, icon('file', 20),
+      h('a', { href: a.url, target: '_blank', rel: 'noopener', class: 'filelink' }, icon('file', 20),
         h('span', { style: 'min-width:0' }, h('b', {}, a.name), h('small', { class: 't-meta', style: 'display:block' }, [size(a.size_bytes), nameOf(a.uploader_id, true), fmtDateTime(a.created_at)].filter(Boolean).join(' · ')))),
       (a.uploader_id === S.me.id || S.me.is_admin) && h('button', { class: 'xbtn sm', type: 'button', 'aria-label': `«${a.name}» faylini olib tashlash`, onclick: async () => {
         if (!await confirmBox({ title: 'Fayl olib tashlansinmi?', text: 'U topshiriqdan chiqadi va Drive savatiga o\'tadi (30 kun turadi).', ok: 'Olib tashlash' })) return;
