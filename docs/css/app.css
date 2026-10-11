@@ -124,3 +124,7 @@ textarea.input { min-height: 88px; resize: vertical; }
 .seg { display: flex; background: var(--soft); border-radius: 14px; padding: 4px; gap: 2px; }
 .seg button { flex: 1; min-height: 42px; border: none; border-radius: 10px; background: transparent; color: var(--grey-ink); font-weight: 600; font-size: 13px; cursor: pointer; padding: 0 4px; }
 .seg button.on { background: var(--card); color: var(--ink); font-weight: 700; }
+
+button.card.tap { border: none; text-align: left; width: 100%; cursor: pointer; font: inherit; color: inherit; }
+button.card.tap:active { background: var(--soft); }
+button.card.tap:focus-visible { outline: 3px solid rgba(11,107,88,.4); outline-offset: 2px; }

@@ -2,6 +2,7 @@ import { sb, S, bus, h, icon, toast, ask, confirmBox, today, fmtDate, fmtDateTim
   go, Head, BackHead, Empty, addDays, mondayOf, monthStart, monthEnd, fmtDay, monthName, hhmm,
   owner, approverOf, loadAll, loadPlan, loadReports, loadRequests, loadTasks, ping } from './core.js';
 
+const R = { tab: 'kunlik', date: null, range: 'oy' };
 const iAmOwner = () => owner().id === S.me.id;
 const inRange = (d, a, b) => d && d >= a && d <= b;
 
@@ -142,13 +143,33 @@ export function RequestCard(r) {
     detail, buttons);
 }
 
+/** Yuborilgan so'rov bosilganda nima ochilishi. */
+function openTarget(r) {
+  const rep = r.report_id ? S.reports.find((x) => x.id === r.report_id) : null;
+  if (rep) {
+    // Qaytarilgan kunlik hujjat: tuzatib qayta yuborish mumkin bo'lgan joyga olib boradi
+    if (rep.period === 'kunlik' && rep.owner_id === S.me.id && ['qaytarildi', 'qoralama'].includes(rep.status)) { R.tab = 'kunlik'; R.date = rep.period_start; go('#/hisobot'); return; }
+    go(`#/hisobot/${rep.id}`); return;
+  }
+  if (r.task_id && S.tasks.some((t) => t.id === r.task_id)) { go(`#/ish/${r.task_id}`); return; }
+  toast('Bu so\'rovga bog\'langan sahifa yo\'q');
+}
+
 export function SentCard(r) {
-  const [label, cls] = REQ_STATE[r.status];
-  return h('article', { class: 'card' },
-    h('div', { class: 'between' }, h('span', { class: 't-meta', style: 'font-weight:700' }, REQ_LABEL[r.kind]), h('span', { class: `chip ${cls}` }, r.kind === 'qaror' && r.status === 'tasdiqlandi' ? 'Javob berildi' : label)),
+  let [label, cls] = REQ_STATE[r.status];
+  if (r.status === 'rad' && (r.kind === 'reja' || r.kind === 'hisobot')) label = 'Qaytarildi';
+  if (r.kind === 'qaror' && r.status === 'tasdiqlandi') label = 'Javob berildi';
+  const rep = r.report_id ? S.reports.find((x) => x.id === r.report_id) : null;
+  const fixable = rep && rep.owner_id === S.me.id && rep.status === 'qaytarildi' && r.status === 'rad';
+  const linked = !!(rep || (r.task_id && S.tasks.some((t) => t.id === r.task_id)));
+  return h(linked ? 'button' : 'article', { class: 'card' + (linked ? ' tap' : ''), type: linked ? 'button' : null, onclick: linked ? () => openTarget(r) : null },
+    h('div', { class: 'between' }, h('span', { class: 't-meta', style: 'font-weight:700' }, REQ_LABEL[r.kind]), h('span', { class: `chip ${cls}` }, label)),
     h('div', { class: 't-title' }, r.title),
+    r.kind === 'muddat' && h('div', { class: 't-meta' }, `${fmtDate(r.payload.old_due)} → ${fmtDate(r.payload.new_due)}`),
     r.response && h('div', {}, h('div', { class: 't-meta' }, 'Javob'), h('div', { class: 'text' }, r.response)),
-    h('div', { class: 't-meta' }, r.status === 'kutilmoqda' ? `Yuborilgan: ${fmtDateTime(r.created_at)}` : `Javob: ${fmtDateTime(r.responded_at)}`));
+    h('div', { class: 'between' },
+      h('span', { class: 't-meta' }, r.status === 'kutilmoqda' ? `Yuborilgan: ${fmtDateTime(r.created_at)}` : `Javob: ${fmtDateTime(r.responded_at)}`),
+      linked && h('span', { class: 't-meta', style: 'font-weight:700;color:var(--brand);display:flex;align-items:center;gap:2px' }, fixable ? 'Tuzatib qayta yuborish' : 'Ochish', icon('next', 16))));
 }
 
 export async function askDecision(task) {
@@ -289,7 +310,6 @@ function genPeriod(kind, start, end) {
 }
 
 // ---------- Hisobot bo'limi ----------
-const R = { tab: 'kunlik', date: null, range: 'oy' };
 
 /** Bitta hisobot kartasi: egasi tuzadi va yuboradi, tasdiqlovchi ko'radi. */
 function ReportCard({ period, start, end, title, generate }) {
@@ -429,7 +449,8 @@ export function ReportDetail(id) {
       h('div', { class: 'text' }, r.body || ''),
       h('div', { class: 't-meta' }, `Yuborilgan: ${fmtDateTime(r.sent_at)}${r.on_time === false ? ' · kechikib' : ''}`),
       r.approved_at && h('div', { class: 't-meta' }, `Tasdiqlagan: ${nameOf(r.approver_id, true)} · ${fmtDateTime(r.approved_at)}`),
-      r.approver_comment && h('div', {}, h('div', { class: 't-meta' }, 'Izoh'), h('div', { class: 'text' }, r.approver_comment))),
+      r.approver_comment && h('div', {}, h('div', { class: 't-meta' }, 'Izoh'), h('div', { class: 'text' }, r.approver_comment)),
+      r.owner_id === S.me.id && r.status === 'qaytarildi' && r.period === 'kunlik' && h('button', { class: 'btn', onclick: () => { R.tab = 'kunlik'; R.date = r.period_start; go('#/hisobot'); } }, 'Tuzatib qayta yuborish')),
     (r.changes || []).length ? [h('div', { class: 'section' }, h('h2', {}, 'O\'zgarishlar')),
       h('section', { class: 'card' }, h('div', { class: 'log' }, [...r.changes].reverse().map((c) => h('div', { class: 'item' },
         h('span', { class: 'who' }, nameOf(c.by, true)), ' ', h('span', { class: 'when' }, `${fmtDateTime(c.at)} · tasdiqladi ${nameOf(c.approved_by, true)}`),
