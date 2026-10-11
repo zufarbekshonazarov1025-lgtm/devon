@@ -365,6 +365,7 @@ export function More() {
     h('div', { class: 'section' }, h('h2', { style: 'font-size:13px;color:var(--muted)' }, 'Ishlar')),
     h('div', { class: 'list' },
       row('Tarix', 'Bajarilgan va bekor qilingan ishlar', () => { F.show = 'closed'; go('#/ishlar'); }),
+      row('Kimdan kutilmoqda', 'Uchinchi shaxslardan kutilayotgan ishlar', () => go('#/kutilmoqda')),
       row('Savat', 'O\'chirilganlar, 30 kun ichida qaytariladi', () => go('#/savat')),
       row('Eslatmalar', 'Takrorlanadigan va bir martalik', () => go('#/eslatmalar')),
       row('Takrorlanuvchi topshiriqlar', 'Har hafta yoki har oy o\'zi ochiladi', () => go('#/takror'))),
