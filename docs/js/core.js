@@ -236,7 +236,7 @@ export function countUp(root) {
   for (const el of root.querySelectorAll('.tile b')) {
     const m = el.textContent.match(/^(\d+)(.*)$/); if (!m || Number(m[1]) === 0) continue;
     const n = Number(m[1]), t0 = performance.now();
-    const step = (t) => { const k = Math.min(1, (t - t0) / 500); el.textContent = Math.round(n * (1 - (1 - k) ** 3)) + m[2]; if (k < 1 && el.isConnected) requestAnimationFrame(step); };
+    const step = (t) => { const k = Math.min(1, (t - t0) / 900); el.textContent = Math.round(n * (1 - (1 - k) ** 3)) + m[2]; if (k < 1 && el.isConnected) requestAnimationFrame(step); };
     el.textContent = '0' + m[2]; requestAnimationFrame(step);
   }
 }

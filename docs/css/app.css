@@ -178,7 +178,6 @@ button.who.tapwho { border: none; cursor: pointer; font-family: inherit; min-hei
 .sheet { animation: sheetin .22s cubic-bezier(.2,.9,.3,1) both; }
 @keyframes ovin { from { background: rgba(20,32,29,0); } }
 @keyframes sheetin { from { transform: translateY(100%); } to { transform: none; } }
-.planrow.ticked input { animation: tickpop .35s cubic-bezier(.2,1.6,.4,1) both; }
 .planrow.ticked .check > span:last-child > span:first-child { animation: tickfade .4s ease-out both; }
 @keyframes tickpop { from { transform: scale(.5); } 60% { transform: scale(1.3); } to { transform: none; } }
 @keyframes tickfade { from { color: var(--ink); text-decoration-color: transparent; } to { color: var(--muted); text-decoration-color: currentColor; } }
@@ -197,3 +196,7 @@ button.who.tapwho { border: none; cursor: pointer; font-family: inherit; min-hei
 @keyframes celeout { to { opacity: 0; } }
 @keyframes spark { from { opacity: 1; transform: rotate(var(--a)) translateX(30px) scale(1); } to { opacity: 0; transform: rotate(var(--a)) translateX(var(--d)) scale(.4); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+
+.slideL { animation: slideL .2s ease-out both; } .slideR { animation: slideR .2s ease-out both; }
+@keyframes slideL { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: none; } }
+@keyframes slideR { from { opacity: 0; transform: translateX(-40px); } to { opacity: 1; transform: none; } }

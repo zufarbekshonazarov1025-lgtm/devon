@@ -39,7 +39,25 @@ function route() {
   return [Home(), '#/bugun'];
 }
 
-let ready = false, booted = false;
+let ready = false, booted = false, swipeDir = 0;
+
+// Barmoq bilan o'ngga-chapga surib, pastki menyudagi qo'shni bo'limga o'tish
+let touch = null;
+const scrollsSideways = (el) => { for (; el && el !== app; el = el.parentElement) if (el.scrollWidth > el.clientWidth + 4 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return true; return false; };
+app.addEventListener('touchstart', (e) => {
+  const t = e.touches[0];
+  touch = e.touches.length === 1 && !scrollsSideways(e.target) && !e.target.closest('input[type=range], textarea') ? { x: t.clientX, y: t.clientY, at: Date.now() } : null;
+}, { passive: true });
+app.addEventListener('touchend', (e) => {
+  if (!touch || document.querySelector('.overlay')) { touch = null; return; }
+  const t = e.changedTouches[0], dx = t.clientX - touch.x, dy = t.clientY - touch.y, quick = Date.now() - touch.at < 700;
+  touch = null;
+  if (!quick || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 2) return;
+  const i = NAV.findIndex(([href]) => href === (location.hash || '#/bugun'));
+  const next = i < 0 ? null : NAV[i + (dx < 0 ? 1 : -1)];
+  if (!next) return;
+  swipeDir = dx < 0 ? 1 : -1; location.hash = next[0];
+}, { passive: true });
 function render() {
   // Kirish animatsiyasi tugashini kutamiz (faqat birinchi ochilishda, 1,4 soniyagacha)
   if (!booted) {
@@ -53,7 +71,7 @@ function render() {
   if (!S.me) { app.replaceChildren(NoProfile()); return; }
   const y = window.scrollY, prev = render.last;
   const [view, active] = route();
-  if (prev !== location.hash) view.classList.add('pagein');
+  if (prev !== location.hash) { view.classList.add(swipeDir ? (swipeDir > 0 ? 'slideL' : 'slideR') : 'pagein'); swipeDir = 0; }
   app.replaceChildren(view, Nav(active));
   if (prev !== location.hash && (location.hash || '#/bugun') === '#/bugun') countUp(view);
   render.last = location.hash;
