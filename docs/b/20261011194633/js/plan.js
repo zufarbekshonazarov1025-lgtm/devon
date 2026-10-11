@@ -2,6 +2,7 @@ import { sb, S, bus, h, icon, toast, ask, confirmBox, today, fmtDate, fmtDateTim
   go, Head, BackHead, Empty, addDays, mondayOf, monthStart, monthEnd, fmtDay, monthName, hhmm,
   owner, approverOf, fx, loadAll, loadPlan, loadReports, loadRequests, loadTasks, ping } from './core.js';
 
+import { AchievementsCard } from './more.js';
 const R = { tab: 'kunlik', date: null, range: 'oy' };
 const iAmOwner = () => owner().id === S.me.id;
 const inRange = (d, a, b) => d && d >= a && d <= b;
@@ -476,6 +477,7 @@ function StatsTab() {
     k.levels.length ? h('section', { class: 'card', style: 'gap:0' },
       h('b', { style: 'padding-bottom:8px' }, 'Vakolat darajasi bo\'yicha'),
       k.levels.map((l) => row(`${l.n}-daraja`, `${l.total} ta`, `vaqtida ${l.good}`))) : null,
+    AchievementsCard(),
   ];
 }
 

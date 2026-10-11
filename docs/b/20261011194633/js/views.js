@@ -1,5 +1,6 @@
 import { sb, S, bus, h, icon, toast, ask, confirmBox, today, fmtDate, fmtDateTime, dayOf, daysLeft, longToday, greeting,
   celebrate, STATUS, isOpen, priority, dueChip, onTime, onTimeStats, nameOf, other, profile, loadTasks, updateTask, notify, go, Head, BackHead, Empty, owner } from './core.js';
+import { Bell, HomeKudos, StreakChip, KudosBlock, downloadExcel } from './more.js';
 import { HomePlan, RequestCard, pendingForMe, mySentRequests, askDecision, askReschedule, SentCard } from './plan.js';
 
 export function TaskCard(t) {
@@ -108,8 +109,10 @@ export function Home() {
 
   return h('main', { class: 'view' },
     Head(`${d.week} · ${greeting()}, ${me.short_name}`, d.day,
-      h('button', { class: 'iconbtn', 'aria-label': 'Qidiruv', onclick: () => go('#/ishlar') }, icon('search', 20))),
+      h('div', { style: 'display:flex;gap:8px' }, Bell(), h('button', { class: 'iconbtn', 'aria-label': 'Qidiruv', onclick: () => go('#/ishlar') }, icon('search', 20)))),
     motto && h('div', { class: 'motto' }, motto),
+    me.id === owner().id && StreakChip(),
+    HomeKudos(),
     h('div', { class: 'tiles' }, tiles.map(([n, l, c, show, who]) => h('button', { class: 'tile', type: 'button', 'aria-label': `${l}: ${n}. Ro'yxatni ochish`,
       onclick: () => { F.show = show; F.who = who; F.q = ''; go('#/ishlar'); } }, h('b', { class: c }, n), h('span', {}, l)))),
     barokat && h('div', { class: 'banner gold' }, 'Barokatli kun bo\'ldi'),
@@ -324,6 +327,7 @@ export function TaskDetail(id) {
       t.purpose && h('div', {}, h('div', { class: 't-meta' }, 'Nima uchun'), h('div', { class: 'text' }, t.purpose)),
       t.result && h('div', {}, h('div', { class: 't-meta' }, 'Natija'), h('div', { class: 'text' }, t.result))),
     actions.length ? h('div', { class: 'row', style: 'flex-wrap:wrap' }, actions) : null,
+    KudosBlock(t),
     h('div', { class: 'section' }, h('h2', {}, 'Izohlar')),
     h('section', { class: 'card' }, comments,
       h('div', { class: 'field' }, h('label', { for: 'c_new' }, 'Yangi izoh'), cInput),
@@ -380,6 +384,8 @@ export function More() {
     Head(`${S.me.short_name}${S.me.is_admin ? ' · admin' : ''}`, 'Yana'),
     h('div', { class: 'section' }, h('h2', { style: 'font-size:13px;color:var(--muted)' }, 'Ishlar')),
     h('div', { class: 'list' },
+      row('Matndan qo\'shish', 'Bir nechta topshiriqni ro\'yxatdan kiritish', () => go('#/ishlar/matn')),
+      row('Excelga chiqarish', 'Topshiriqlar, reja va hisobotlar bitta faylda', () => downloadExcel()),
       row('Tarix', 'Bajarilgan va bekor qilingan ishlar', () => { F.show = 'closed'; go('#/ishlar'); }),
       row('Kimdan kutilmoqda', 'Uchinchi shaxslardan kutilayotgan ishlar', () => go('#/kutilmoqda')),
       row('Savat', 'O\'chirilganlar, 30 kun ichida qaytariladi', () => go('#/savat')),
@@ -387,7 +393,7 @@ export function More() {
       row('Takrorlanuvchi topshiriqlar', 'Har hafta yoki har oy o\'zi ochiladi', () => go('#/takror'))),
     h('div', { class: 'section' }, h('h2', { style: 'font-size:13px;color:var(--muted)' }, 'Sozlamalar')),
     h('div', { class: 'list' },
-      row('Mening sozlamalarim', 'Bildirishnoma, tinch soatlar, PIN', soon),
+      row('Mening sozlamalarim', 'Rang, tungi rejim, tinch soatlar', () => go('#/sozlamalar')),
       S.me.is_admin && row('Admin panel', 'Muhimlik, vaqtlar, maqsadlar, foydalanuvchilar', () => go('#/admin'))),
     h('button', { class: 'btn danger', onclick: async () => { if (await confirmBox({ title: 'Hisobdan chiqilsinmi?', ok: 'Chiqish' })) sb.auth.signOut(); } }, 'Hisobdan chiqish'));
 }

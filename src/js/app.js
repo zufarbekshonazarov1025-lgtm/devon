@@ -1,9 +1,11 @@
 import { sb, S, bus, h, icon, loadBase, loadTasks, loadAll, toast, countUp } from './core.js';
 import { ReportsView, ReportDetail, pendingForMe } from './plan.js';
 import { loadExtra, runRecurrences, calShift, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
+import { loadMore, applyTheme, Notifications, MySettings, FromText } from './more.js';
 import { Login, NoProfile, Home, Tasks, TaskForm, TaskDetail, Approvals, Soon, More, Trash, needsMe } from './views.js';
 
 const app = document.getElementById('app');
+applyTheme();
 
 const NAV = [
   ['#/bugun', 'Bugun', 'home'], ['#/ishlar', 'Ishlar', 'list'], ['#/taqvim', 'Taqvim', 'cal'],
@@ -22,6 +24,9 @@ function route() {
   let m;
   if (hash === '#/bugun') return [Home(), '#/bugun'];
   if (hash === '#/ishlar') return [Tasks(), '#/ishlar'];
+  if (hash === '#/ishlar/matn') return [FromText(), '#/ishlar'];
+  if (hash === '#/xabarlar') return [Notifications(), '#/bugun'];
+  if (hash === '#/sozlamalar') return [MySettings(), '#/yana'];
   if (hash === '#/ishlar/yangi') return [TaskForm(null), '#/ishlar'];
   if ((m = hash.match(/^#\/ish\/([0-9a-f-]+)\/tahrir$/))) return [TaskForm(m[1]), '#/ishlar'];
   if ((m = hash.match(/^#\/ish\/([0-9a-f-]+)$/))) return [TaskDetail(m[1]), '#/ishlar'];
@@ -93,14 +98,14 @@ async function start(session) {
   if (!session && S.session) { history.replaceState(null, '', '#/bugun'); location.reload(); return; }
   S.session = session; ready = false;
   if (!session) { if (channel) { sb.removeChannel(channel); channel = null; } S.me = null; S.tasks = []; history.replaceState(null, '', '#/bugun'); render(); return; }
-  try { await loadBase(); if (S.me) { await Promise.all([loadAll(), loadExtra()]); await runRecurrences(); } }
+  try { await loadBase(); if (S.me) { await Promise.all([loadAll(), loadExtra(), loadMore()]); await runRecurrences(); } }
   catch (e) { toast('Ma\'lumotni yuklab bo\'lmadi. Internetni tekshiring.'); }
   ready = true; render();
   if (S.me && !channel) {
     let timer;
-    const refresh = () => { clearTimeout(timer); timer = setTimeout(async () => { await Promise.all([loadAll(), loadExtra()]); if (!busy()) render(); }, 400); };
+    const refresh = () => { clearTimeout(timer); timer = setTimeout(async () => { await Promise.all([loadAll(), loadExtra(), loadMore()]); if (!busy()) render(); }, 400); };
     channel = sb.channel('devon-data');
-    for (const table of ['tasks', 'plan_items', 'requests', 'reports', 'events', 'reminders']) channel.on('postgres_changes', { event: '*', schema: 'public', table }, refresh);
+    for (const table of ['tasks', 'plan_items', 'requests', 'reports', 'events', 'reminders', 'notifications']) channel.on('postgres_changes', { event: '*', schema: 'public', table }, refresh);
     channel.subscribe();
   }
 }
@@ -115,5 +120,5 @@ sb.auth.onAuthStateChange((_event, session) => {
 });
 
 document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState === 'visible' && S.me) { await Promise.all([loadAll(), loadExtra()]); await runRecurrences(); if (!busy()) render(); }
+  if (document.visibilityState === 'visible' && S.me) { await Promise.all([loadAll(), loadExtra(), loadMore()]); await runRecurrences(); if (!busy()) render(); }
 });
