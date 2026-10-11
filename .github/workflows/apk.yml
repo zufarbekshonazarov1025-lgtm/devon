@@ -24,7 +24,7 @@ jobs:
       - name: Xatoni ko'rsatish
         if: failure()
         run: |
-          grep -nE "error:|e: |FAILED|What went wrong|^> |Could not|not found|Caused by|AAPT|\.java:[0-9]+" build.log | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
+          { grep -E "error:|warning: \[|\.java:[0-9]+: |AAPT|ERROR" build.log | head -5; awk '/What went wrong/{f=1} f' build.log | grep -v '^$' | head -4; } | while IFS= read -r line; do echo "::error::${line:0:900}"; done
           { echo '```'; tail -80 build.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Nomlash
         run: cp android/app/build/outputs/apk/debug/app-debug.apk Devon.apk
