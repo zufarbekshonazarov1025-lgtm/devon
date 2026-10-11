@@ -200,3 +200,9 @@ button.who.tapwho { border: none; cursor: pointer; font-family: inherit; min-hei
 .slideL { animation: slideL .2s ease-out both; } .slideR { animation: slideR .2s ease-out both; }
 @keyframes slideL { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: none; } }
 @keyframes slideR { from { opacity: 0; transform: translateX(-40px); } to { opacity: 1; transform: none; } }
+
+html, body { overflow-x: hidden; overscroll-behavior-x: none; }
+#app { overflow-x: clip; }
+.slideL, .slideR, .pagein { animation-fill-mode: backwards; }
+@keyframes slideL { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+@keyframes slideR { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: none; } }

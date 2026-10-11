@@ -49,7 +49,7 @@ app.addEventListener('touchstart', (e) => {
   touch = e.touches.length === 1 && !scrollsSideways(e.target) && !e.target.closest('input[type=range], textarea') ? { x: t.clientX, y: t.clientY, at: Date.now() } : null;
 }, { passive: true });
 app.addEventListener('touchend', (e) => {
-  if (!touch || document.querySelector('.overlay')) { touch = null; return; }
+  if (!touch || document.querySelector('.overlay') || location.hash === '#/taqvim') { touch = null; return; }
   const t = e.changedTouches[0], dx = t.clientX - touch.x, dy = t.clientY - touch.y, quick = Date.now() - touch.at < 700;
   touch = null;
   if (!quick || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 2) return;
