@@ -1,6 +1,6 @@
 import { sb, S, bus, h, icon, toast, ask, confirmBox, today, fmtDate, fmtDateTime, dayOf, isOpen, onTime, nameOf, STATUS,
   go, Head, BackHead, Empty, addDays, mondayOf, monthStart, monthEnd, fmtDay, monthName, hhmm,
-  owner, approverOf, loadAll, loadPlan, loadReports, loadRequests, loadTasks, ping } from './core.js';
+  owner, approverOf, fx, loadAll, loadPlan, loadReports, loadRequests, loadTasks, ping } from './core.js';
 
 const R = { tab: 'kunlik', date: null, range: 'oy' };
 const iAmOwner = () => owner().id === S.me.id;
@@ -221,8 +221,10 @@ async function editItem(i) {
   await loadPlan(); bus.render();
 }
 async function togglePlan(i) {
-  const { error } = await sb.from('plan_items').update({ done: !i.done, done_at: !i.done ? new Date().toISOString() : null }).eq('id', i.id);
+  const was = i.done;
+  const { error } = await sb.from('plan_items').update({ done: !was, done_at: !was ? new Date().toISOString() : null }).eq('id', i.id);
   if (error) { toast('Saqlab bo\'lmadi'); return; }
+  if (!was) { fx.tick = i.id; setTimeout(() => { if (fx.tick === i.id) fx.tick = null; }, 700); }
   await loadPlan(); bus.render();
 }
 function PlanList(date, editable, canAdd = false) {
@@ -234,7 +236,7 @@ function PlanList(date, editable, canAdd = false) {
   const rows = items.map((i) => {
     const canTick = editable || (canAdd && forOf(i) === S.me.id);
     const task = i.task_id ? S.tasks.find((t) => t.id === i.task_id) : null;
-    return h('div', { class: 'planrow' },
+    return h('div', { class: 'planrow' + (fx.tick === i.id && i.done ? ' ticked' : '') },
       h('label', { class: 'check', style: 'flex:1;min-width:0' },
         h('input', { type: 'checkbox', checked: i.done, disabled: !canTick, onchange: () => togglePlan(i) }),
         h('span', { class: 'ptime' }, i.at_time ? i.at_time.slice(0, 5) : '—'),

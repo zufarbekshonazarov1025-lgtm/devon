@@ -170,3 +170,30 @@ button.who.tapwho { border: none; cursor: pointer; font-family: inherit; min-hei
 .planrow .check { align-items: flex-start; } .planrow .check input { margin-top: 10px; flex: none; }
 
 .planrow .ptime { margin-top: 9px; }
+
+/* ---------- Animatsiyalar ---------- */
+.pagein { animation: pagein .16s ease-out both; }
+@keyframes pagein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.overlay { animation: ovin .18s ease-out both; }
+.sheet { animation: sheetin .22s cubic-bezier(.2,.9,.3,1) both; }
+@keyframes ovin { from { background: rgba(20,32,29,0); } }
+@keyframes sheetin { from { transform: translateY(100%); } to { transform: none; } }
+.planrow.ticked input { animation: tickpop .35s cubic-bezier(.2,1.6,.4,1) both; }
+.planrow.ticked .check > span:last-child > span:first-child { animation: tickfade .4s ease-out both; }
+@keyframes tickpop { from { transform: scale(.5); } 60% { transform: scale(1.3); } to { transform: none; } }
+@keyframes tickfade { from { color: var(--ink); text-decoration-color: transparent; } to { color: var(--muted); text-decoration-color: currentColor; } }
+.banner.gold { background: #FBEFC9; color: #6B4A00; text-align: center; }
+.cele { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; pointer-events: none; animation: celeout .3s .8s ease-in forwards; }
+.cele.big { animation-delay: 1.9s; }
+.cbox { background: var(--card); border-radius: 24px; padding: 22px 28px; display: flex; flex-direction: column; align-items: center; gap: 12px; box-shadow: 0 12px 40px rgba(20,32,29,.22); animation: celein .3s cubic-bezier(.2,1.4,.4,1) both; }
+.cbox b { font-size: 17px; font-weight: 700; }
+.cele.big .cbox b { font-size: 19px; color: #6B4A00; }
+.cring { position: relative; display: flex; }
+.cring svg circle { animation: celein .3s cubic-bezier(.2,1.4,.4,1) both; transform-origin: center; }
+.cring svg path { stroke-dasharray: 44; stroke-dashoffset: 44; animation: celedraw .35s .2s ease-out forwards; }
+.cring i { position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; margin: -3.5px; border-radius: 4px; background: var(--gold); opacity: 0; animation: spark .7s ease-out forwards; }
+@keyframes celein { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+@keyframes celedraw { to { stroke-dashoffset: 0; } }
+@keyframes celeout { to { opacity: 0; } }
+@keyframes spark { from { opacity: 1; transform: rotate(var(--a)) translateX(30px) scale(1); } to { opacity: 0; transform: rotate(var(--a)) translateX(var(--d)) scale(.4); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }

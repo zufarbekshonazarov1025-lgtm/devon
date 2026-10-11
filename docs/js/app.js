@@ -1,4 +1,4 @@
-import { sb, S, bus, h, icon, loadBase, loadTasks, loadAll, toast } from './core.js';
+import { sb, S, bus, h, icon, loadBase, loadTasks, loadAll, toast, countUp } from './core.js';
 import { ReportsView, ReportDetail, pendingForMe } from './plan.js';
 import { loadExtra, runRecurrences, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
 import { Login, NoProfile, Home, Tasks, TaskForm, TaskDetail, Approvals, Soon, More, Trash, needsMe } from './views.js';
@@ -53,7 +53,9 @@ function render() {
   if (!S.me) { app.replaceChildren(NoProfile()); return; }
   const y = window.scrollY, prev = render.last;
   const [view, active] = route();
+  if (prev !== location.hash) view.classList.add('pagein');
   app.replaceChildren(view, Nav(active));
+  if (prev !== location.hash && (location.hash || '#/bugun') === '#/bugun') countUp(view);
   render.last = location.hash;
   window.scrollTo(0, prev === location.hash ? y : 0);
 }

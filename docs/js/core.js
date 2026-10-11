@@ -215,3 +215,28 @@ export async function ping(userId, kind, title, body, refType, refId) {
   if (!userId || userId === S.me.id) return;
   await sb.from('notifications').insert({ user_id: userId, kind, title, body, ref_type: refType, ref_id: refId });
 }
+
+// ---------- Animatsiyalar ----------
+export const fx = { tick: null };
+const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** Ekran o'rtasida qisqa tabrik: 'done' (topshiriq bajarildi) yoki 'barokat' (kun yakunlandi). Bosishga xalaqit bermaydi. */
+export function celebrate(kind) {
+  if (calm()) return;
+  document.querySelector('.cele')?.remove();
+  const big = kind === 'barokat';
+  const sparks = big ? Array.from({ length: 10 }, (_, i) => `<i style="--a:${i * 36}deg;--d:${60 + (i % 3) * 14}px;animation-delay:${0.25 + (i % 4) * 0.05}s"></i>`).join('') : '';
+  const el = h('div', { class: 'cele' + (big ? ' big' : ''), 'aria-hidden': 'true', html:
+    `<div class="cbox"><span class="cring">${sparks}<svg width="72" height="72" viewBox="0 0 72 72"><circle cx="36" cy="36" r="34" fill="${big ? '#E3B341' : '#0B6B58'}"/><path d="M22 37l10 10 19-21" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><b>${big ? 'Barokatli kun bo\'ldi' : 'Bajarildi'}</b></div>` });
+  document.body.append(el);
+  setTimeout(() => el.remove(), big ? 2200 : 1100);
+}
+/** Sonlarni 0 dan haqiqiy qiymatgacha sanab chiqadi. */
+export function countUp(root) {
+  if (calm()) return;
+  for (const el of root.querySelectorAll('.tile b')) {
+    const m = el.textContent.match(/^(\d+)(.*)$/); if (!m || Number(m[1]) === 0) continue;
+    const n = Number(m[1]), t0 = performance.now();
+    const step = (t) => { const k = Math.min(1, (t - t0) / 500); el.textContent = Math.round(n * (1 - (1 - k) ** 3)) + m[2]; if (k < 1 && el.isConnected) requestAnimationFrame(step); };
+    el.textContent = '0' + m[2]; requestAnimationFrame(step);
+  }
+}

@@ -1,5 +1,5 @@
 import { sb, S, bus, h, icon, toast, ask, confirmBox, today, fmtDate, fmtDateTime, dayOf, daysLeft, longToday, greeting,
-  STATUS, isOpen, priority, dueChip, onTime, onTimeStats, nameOf, other, profile, loadTasks, updateTask, notify, go, Head, BackHead, Empty, owner } from './core.js';
+  celebrate, STATUS, isOpen, priority, dueChip, onTime, onTimeStats, nameOf, other, profile, loadTasks, updateTask, notify, go, Head, BackHead, Empty, owner } from './core.js';
 import { HomePlan, RequestCard, pendingForMe, mySentRequests, askDecision, askReschedule, SentCard } from './plan.js';
 
 export function TaskCard(t) {
@@ -86,9 +86,11 @@ export function Home() {
 
   // Shu kunga tegishli hamma ish bajarilgan bo'lsa
   const dueToday = S.tasks.filter((t) => t.assignee_id === me.id && t.due_date === today() && t.status !== 'bekor');
-  const planToday = me.id === owner().id ? S.plan.filter((i) => i.owner_id === me.id && (i.for_id || i.owner_id) === me.id && i.plan_date === today()) : [];
+  const planToday = S.plan.filter((i) => (i.for_id || i.owner_id) === me.id && i.plan_date === today());
   const barokat = dueToday.length + planToday.length > 0 && dueToday.every((t) => !isOpen(t) || t.status === 'tekshiruvda') && planToday.every((i) => i.done);
 
+  // Kuniga bir marta tabriklaymiz
+  if (barokat) { try { const k = 'devon_barokat_' + me.id; if (localStorage.getItem(k) !== today()) { localStorage.setItem(k, today()); setTimeout(() => celebrate('barokat'), 300); } } catch (e) { /* xotira yopiq bo'lsa tabriksiz */ } }
   const reqs = pendingForMe();
   const waitingBlock = waiting.length + reqs.length ? [
     h('div', { class: 'section' }, h('h2', {}, 'Sizdan javob kutmoqda'), h('span', { class: 'chip red' }, waiting.length + reqs.length)),
@@ -110,7 +112,7 @@ export function Home() {
     motto && h('div', { class: 'motto' }, motto),
     h('div', { class: 'tiles' }, tiles.map(([n, l, c, show, who]) => h('button', { class: 'tile', type: 'button', 'aria-label': `${l}: ${n}. Ro'yxatni ochish`,
       onclick: () => { F.show = show; F.who = who; F.q = ''; go('#/ishlar'); } }, h('b', { class: c }, n), h('span', {}, l)))),
-    barokat && h('div', { class: 'banner' }, 'Barokatli kun bo\'ldi'),
+    barokat && h('div', { class: 'banner gold' }, 'Barokatli kun bo\'ldi'),
     me.kind === 'rahbar' ? [waitingBlock, HomePlan(), theirsBlock, mineBlock] : [waitingBlock, HomePlan(), mineBlock, theirsBlock],
     h('a', { class: 'fab', href: '#/ishlar/yangi', 'aria-label': 'Yangi topshiriq' }, icon('plus', 24, '#fff', 2.5)));
 }
@@ -142,8 +144,10 @@ async function submitTask(t) {
   const self = t.creator_id === t.assignee_id;
   const patch = { result, submitted_at: now, status: self ? 'bajarildi' : 'tekshiruvda', closed_at: self ? now : null };
   if (!t.accepted_at) patch.accepted_at = now;
-  if (await updateTask(t.id, patch, self ? 'Bajarildi' : 'Tekshiruvga yuborildi'))
+  if (await updateTask(t.id, patch, self ? null : 'Tekshiruvga yuborildi')) {
+    celebrate('done');
     notify(t.creator_id, 'tekshiruv', 'Topshiriq bajarildi, tekshiring', t.title, t.id);
+  }
 }
 async function acceptResult(t) {
   if (await updateTask(t.id, { status: 'bajarildi', closed_at: new Date().toISOString() }, 'Qabul qilindi, tarixga o\'tdi'))
