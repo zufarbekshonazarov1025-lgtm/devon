@@ -39,8 +39,15 @@ function route() {
   return [Home(), '#/bugun'];
 }
 
-let ready = false;
+let ready = false, booted = false;
 function render() {
+  // Kirish animatsiyasi tugashini kutamiz (faqat birinchi ochilishda, 1,4 soniyagacha)
+  if (!booted) {
+    const still = !matchMedia('(prefers-reduced-motion: reduce)').matches && document.querySelector('.boot svg');
+    const left = 1400 - (performance.now() - (window.__bootAt || 0));
+    if (still && left > 0) { clearTimeout(render.t); render.t = setTimeout(render, left); return; }
+    if (S.session ? ready : true) { booted = true; app.classList.add('in'); setTimeout(() => app.classList.remove('in'), 400); }
+  }
   if (!S.session) { app.replaceChildren(Login()); return; }
   if (!ready) return;
   if (!S.me) { app.replaceChildren(NoProfile()); return; }

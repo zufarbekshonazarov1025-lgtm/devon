@@ -11,24 +11,39 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
 <style>
 html,body{margin:0;height:100%;background:#F4F7F6;color:#14201D;font-family:'Onest',system-ui,sans-serif}
-.boot{padding:40vh 16px 0;font-size:28px;font-weight:700;color:#0B6B58;text-align:center}
-.boot small{display:block;margin-top:12px;font-size:14px;font-weight:500;color:#56645F}
+.boot{height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:0 16px}
+.boot svg{width:96px;height:96px;animation:bpop .45s cubic-bezier(.2,1.4,.4,1) both}
+.boot .pg{transform-box:fill-box;animation:bopen .4s .3s ease-out both}
+.boot .pl{transform-origin:right center}.boot .pr{transform-origin:left center}
+.boot .ln{stroke-dasharray:16;stroke-dashoffset:16;animation:bdraw .3s .65s ease-out forwards}
+.boot .ck{stroke-dasharray:22;stroke-dashoffset:22;animation:bdraw .35s .9s ease-out forwards}
+.boot b{font-size:30px;font-weight:700;color:#0B6B58;letter-spacing:-.5px;animation:bup .4s .55s ease-out both}
+.boot i{font-style:normal;font-size:14px;font-weight:600;color:#084F41;animation:bup .4s .85s ease-out both}
+.boot small{display:block;font-size:14px;font-weight:500;color:#56645F}
+@keyframes bpop{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
+@keyframes bopen{from{transform:scaleX(0)}to{transform:none}}
+@keyframes bdraw{to{stroke-dashoffset:0}}
+@keyframes bup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+#app.in>*{animation:bfade .25s ease-out both}
+@keyframes bfade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.boot *,#app.in>*{animation:none!important}.boot .ln,.boot .ck{stroke-dashoffset:0}}
 </style>
 </head>
 <body>
-<div id="app"><div class="boot">Devon</div></div>
+<div id="app"><div class="boot"><svg viewBox="0 0 120 120" aria-hidden="true"><rect width="120" height="120" rx="28" fill="#0B6B58"/><rect class="pg pl" x="28" y="30" width="28" height="60" rx="5" fill="#fff"/><rect class="pg pr" x="64" y="30" width="28" height="60" rx="5" fill="#fff"/><g stroke="#0B6B58" stroke-width="4" stroke-linecap="round" fill="none"><path class="ln" d="M35 44h14"/><path class="ln" d="M35 54h14"/><path class="ln" d="M35 64h9"/><path class="ln" d="M71 44h14"/><path class="ln" d="M71 54h14"/></g><path class="ck" d="M71 70l5 5 9-10" fill="none" stroke="#E3B341" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><rect x="56" y="26" width="8" height="68" rx="4" fill="#E3B341"/></svg><b>Devon</b><i>Ish Bismillah dan boshlanadi.</i></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
+<script>window.__bootAt = performance.now();</script>
 <script type="module">
 // Har ochilganda eng yangi versiyani so'raydi; internet bo'lmasa oxirgi ma'lum versiyani ochadi.
 let v = null;
 try { v = (await fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then((r) => r.json())).v; } catch (e) {}
 try { if (v) localStorage.setItem('devon_v', v); else v = localStorage.getItem('devon_v'); } catch (e) {}
 if (!v) {
-  document.querySelector('.boot').innerHTML = 'Devon<small>Dasturni yuklab bo\'lmadi. Internetni tekshirib, sahifani yangilang.</small>';
+  document.querySelector('.boot').innerHTML = '<b>Devon</b><small>Dasturni yuklab bo\'lmadi. Internetni tekshirib, sahifani yangilang.</small>';
 } else {
   const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = `b/${v}/css/app.css`; document.head.append(css);
   import(`./b/${v}/js/app.js`).catch(() => {
-    document.querySelector('.boot').innerHTML = 'Devon<small>Dasturni yuklab bo\'lmadi. Sahifani yangilang.</small>';
+    document.querySelector('.boot').innerHTML = '<b>Devon</b><small>Dasturni yuklab bo\'lmadi. Sahifani yangilang.</small>';
   });
 }
 </script>
