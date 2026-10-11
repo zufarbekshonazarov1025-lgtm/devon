@@ -312,6 +312,18 @@ function genPeriod(kind, start, end) {
 // ---------- Hisobot bo'limi ----------
 
 /** Bitta hisobot kartasi: egasi tuzadi va yuboradi, tasdiqlovchi ko'radi. */
+/** Uzun matn: yig'ilgan holda 5 qator, bosilganda to'liq ochiladi. */
+const OPEN = new Set();
+function clip(text, key) {
+  const long = (text || '').split('\n').length > 5 || (text || '').length > 280;
+  if (!long) return h('div', { class: 'text' }, text || '');
+  const open = OPEN.has(key);
+  const flip = () => { open ? OPEN.delete(key) : OPEN.add(key); bus.render(); };
+  return h('div', {},
+    h('div', { class: 'text' + (open ? '' : ' clip'), onclick: flip }, text),
+    h('button', { class: 'more', type: 'button', 'aria-expanded': String(open), onclick: flip }, open ? 'Yig\'ish' : 'To\'liq ko\'rsatish'));
+}
+
 function ReportCard({ period, start, end, title, generate }) {
   const rep = findDoc('hisobot', period, start);
   const mine = iAmOwner();
@@ -320,18 +332,18 @@ function ReportCard({ period, start, end, title, generate }) {
   if (!mine) {
     const req = rep && pendingForMe().find((r) => r.report_id === rep.id);
     return h('section', { class: 'card' }, head,
-      rep && rep.status !== 'qoralama' ? h('div', { class: 'text' }, rep.body || '') : h('div', { class: 't-meta' }, 'Hali yuborilmagan.'),
+      rep && rep.status !== 'qoralama' ? clip(rep.body, rep.id) : h('div', { class: 't-meta' }, 'Hali yuborilmagan.'),
       rep && rep.sent_at && h('div', { class: 't-meta' }, `Yuborilgan: ${fmtDateTime(rep.sent_at)}${rep.on_time === false ? ' · kechikib' : ''}`),
       rep && rep.approver_comment && h('div', {}, h('div', { class: 't-meta' }, 'Sizning izohingiz'), h('div', { class: 'text' }, rep.approver_comment)),
       req && h('div', { class: 'row' },
         h('button', { class: 'btn', onclick: () => respond(req, true, null) }, 'Tasdiqlash'),
         h('button', { class: 'btn ghost', onclick: async () => { const v = await ask({ title: 'Izoh yozing', label: 'Nimani o\'zgartirish kerak', ok: 'Yuborish' }); if (v != null) respond(req, false, v); } }, 'Izoh yozish')),
-      rep && h('a', { href: `#/hisobot/${rep.id}`, style: 'font-size:13px;font-weight:600' }, 'To\'liq ko\'rish'));
+      rep && rep.status !== 'qoralama' && h('a', { href: `#/hisobot/${rep.id}`, class: 't-meta', style: 'font-weight:700;color:var(--brand);min-height:44px;display:flex;align-items:center;gap:2px' }, 'Alohida sahifada ochish', icon('next', 16)));
   }
   if (sent) {
     const editReq = S.requests.find((r) => r.kind === 'hisobot_tuzatish' && r.report_id === rep.id && r.status === 'kutilmoqda');
     return h('section', { class: 'card' }, head,
-      h('div', { class: 'text' }, rep.body || ''),
+      clip(rep.body, rep.id),
       h('div', { class: 't-meta' }, `Yuborilgan: ${fmtDateTime(rep.sent_at)}${rep.on_time === false ? ' · kechikib' : ''}`),
       rep.approver_comment && h('div', {}, h('div', { class: 't-meta' }, 'Izoh'), h('div', { class: 'text' }, rep.approver_comment)),
       editReq ? h('div', { class: 't-meta c-amber', style: 'font-weight:600' }, 'Tuzatish so\'rovi yuborilgan, javob kutilmoqda.')

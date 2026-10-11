@@ -128,3 +128,6 @@ textarea.input { min-height: 88px; resize: vertical; }
 button.card.tap { border: none; text-align: left; width: 100%; cursor: pointer; font: inherit; color: inherit; }
 button.card.tap:active { background: var(--soft); }
 button.card.tap:focus-visible { outline: 3px solid rgba(11,107,88,.4); outline-offset: 2px; }
+
+.text.clip { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; line-clamp: 5; overflow: hidden; cursor: pointer; }
+.more { min-height: 44px; padding: 0; border: none; background: none; color: var(--brand); font-weight: 700; font-size: 13px; cursor: pointer; }
