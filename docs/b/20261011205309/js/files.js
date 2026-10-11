@@ -25,7 +25,9 @@ function put(url, file, onProgress) {
 /** Topshiriq ichidagi «Hujjatlar» bo'limi. */
 export function Files(t) {
   const list = h('div', { class: 'log' }, h('div', { class: 't-meta' }, 'Yuklanmoqda…'));
-  const status = h('div', { class: 't-meta', role: 'status' });
+  const bar = h('div', {}), label = h('span', {});
+  const status = h('div', { class: 'upl', role: 'status', style: 'display:none' }, h('div', { class: 'between' }, label, h('span', { class: 'spin', 'aria-hidden': 'true' })), h('div', { class: 'bar' }, bar));
+  const show = (text, k) => { status.style.display = text ? '' : 'none'; label.textContent = text || ''; bar.style.width = `${Math.round((k || 0) * 100)}%`; };
   const load = async () => {
     const { data } = await sb.from('attachments').select('*').eq('task_id', t.id).order('created_at');
     const rows = data || [];
@@ -42,22 +44,22 @@ export function Files(t) {
 
   const input = h('input', { type: 'file', multiple: true, style: 'display:none', onchange: async () => {
     const files = [...input.files]; input.value = '';
-    btn.disabled = true;
+    btn.disabled = true; btn.textContent = 'Yuklanmoqda…';
     for (let i = 0; i < files.length; i++) {
       const f = files[i], tag = files.length > 1 ? `${i + 1}/${files.length} · ` : '';
-      status.textContent = `${tag}${f.name}: tayyorlanmoqda…`;
+      show(`${tag}${f.name}: tayyorlanmoqda…`, 0.03);
       if (!f.size) { toast(`«${f.name}» bo'sh fayl`); continue; }
       const s = await call({ action: 'session', task_id: t.id, name: f.name, mime: f.type, size: f.size });
       if (s.err) { toast(s.err); break; }
       let id;
-      try { id = await put(s.data.upload_url, f, (k) => { status.textContent = `${tag}${f.name}: ${Math.round(k * 100)}%`; }); }
+      try { id = await put(s.data.upload_url, f, (k) => { show(`${tag}${f.name}: yuklanmoqda ${Math.round(k * 100)}%`, 0.05 + k * 0.85); }); }
       catch (e) { toast(`«${f.name}» yuklanmadi: ${e.message}`); continue; }
-      status.textContent = `${tag}${f.name}: saqlanmoqda…`;
+      show(`${tag}${f.name}: saqlanmoqda…`, 0.95);
       const d = await call({ action: 'done', task_id: t.id, file_id: id });
       if (d.err) { toast(d.err); continue; }
-      await load();
+      await load(); toast(`«${f.name}» biriktirildi`);
     }
-    status.textContent = ''; btn.disabled = false;
+    show(''); btn.disabled = false; btn.textContent = '+ Fayl biriktirish';
   } });
   const btn = h('button', { class: 'btn ghost', type: 'button', onclick: () => input.click() }, '+ Fayl biriktirish');
 

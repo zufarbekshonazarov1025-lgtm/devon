@@ -254,3 +254,10 @@ html, body { overflow-x: hidden; overscroll-behavior-x: none; }
 .filerow { display: flex; align-items: center; gap: 4px; border-top: 1px solid var(--soft); padding-top: 8px; } .filerow:first-child { border-top: none; padding-top: 0; }
 .filelink { flex: 1; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 10px; color: var(--ink); }
 .filelink b { display: block; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+
+.upl { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; background: var(--brand-tint); color: var(--brand-dark); font-size: 13px; font-weight: 600; }
+.upl .between span:first-child { overflow-wrap: anywhere; min-width: 0; }
+.upl .bar { background: rgba(255,255,255,.6); } .upl .bar > div { transition: width .25s; }
+.spin { width: 18px; height: 18px; flex: none; border-radius: 9px; border: 2.5px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: spin 2s linear infinite !important; } }
