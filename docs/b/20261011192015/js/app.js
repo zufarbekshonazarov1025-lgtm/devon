@@ -64,7 +64,7 @@ function render() {
     const still = !matchMedia('(prefers-reduced-motion: reduce)').matches && document.querySelector('.boot svg');
     const left = 1400 - (performance.now() - (window.__bootAt || 0));
     if (still && left > 0) { clearTimeout(render.t); render.t = setTimeout(render, left); return; }
-    if (S.session ? ready : true) { booted = true; app.classList.add('in'); setTimeout(() => app.classList.remove('in'), 400); }
+    if (S.session ? ready : true) { booted = true; }
   }
   if (!S.session) { app.replaceChildren(Login()); return; }
   if (!ready) return;
