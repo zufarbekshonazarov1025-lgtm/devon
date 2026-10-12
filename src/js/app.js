@@ -1,6 +1,6 @@
 import { sb, S, bus, h, icon, loadBase, loadTasks, loadAll, toast, countUp } from './core.js';
 import { ReportsView, ReportDetail, pendingForMe } from './plan.js';
-import { loadExtra, runRecurrences, calShift, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
+import { loadExtra, runRecurrences, calShift, calGoto, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
 import { loadMore, applyTheme, Notifications, MySettings, FromText } from './more.js';
 import { driveReturn } from './files.js';
 import { registerDevice } from './native.js';
@@ -78,6 +78,7 @@ function route() {
   if ((m = hash.match(/^#\/ish\/([0-9a-f-]+)\/tahrir$/))) return [TaskForm(m[1]), '#/ishlar'];
   if ((m = hash.match(/^#\/ish\/([0-9a-f-]+)$/))) return [TaskDetail(m[1]), '#/ishlar'];
   if (hash === '#/taqvim') return [Calendar(), hash];
+  if ((m = hash.match(/^#\/taqvim\/(\d{4}-\d{2}-\d{2})$/))) { calGoto(m[1]); history.replaceState(null, '', '#/taqvim'); return [Calendar(), '#/taqvim']; }
   if (hash === '#/eslatmalar') return [Reminders(), '#/yana'];
   if (hash === '#/takror') return [Recurrences(), '#/yana'];
   if (hash === '#/kutilmoqda') return [WaitingOn(), '#/yana'];

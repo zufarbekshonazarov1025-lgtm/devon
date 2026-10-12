@@ -136,6 +136,8 @@ async function eventForm(e, date) {
 }
 
 /** Taqvimda surish: keyingi yoki oldingi kun, hafta yoki oy. */
+/** Vidjetdan kelgan sana: taqvimni shu kunda, kun ko'rinishida ochadi. */
+export function calGoto(d) { C.date = d; C.mode = 'kun'; }
 export function calShift(dir) {
   const d = C.date || today();
   C.date = C.mode === 'kun' ? addDays(d, dir) : C.mode === 'hafta' ? addDays(d, dir * 7) : (dir > 0 ? addDays(monthEnd(d), 1) : monthStart(addDays(monthStart(d), -1)));

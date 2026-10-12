@@ -25,6 +25,7 @@ public class ListService extends RemoteViewsService {
         private final String kind;
         private final List<JSONObject> rows = new ArrayList<>();
         private int today = 0;
+        private String ym = ""; // vidjetdagi oy: YYYY-MM
 
         Factory(Context c, String kind) { this.c = c; this.kind = kind == null ? "tasks" : kind; }
 
@@ -40,6 +41,7 @@ public class ListService extends RemoteViewsService {
                     JSONObject mo = j.optJSONObject("month");
                     if (mo == null) return;
                     today = mo.optInt("today");
+                    ym = mo.optString("ym", new java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.US).format(new java.util.Date()));
                     JSONArray days = mo.getJSONArray("days");
                     int pad = mo.optInt("first", 1) - 1;
                     for (int i = 0; i < pad; i++) rows.add(new JSONObject());
@@ -107,7 +109,8 @@ public class ListService extends RemoteViewsService {
                 dots.setSpan(new ForegroundColorSpan(color), at, at + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
             v.setTextViewText(R.id.dots, dots);
-            v.setOnClickFillInIntent(R.id.cell, new Intent().putExtra("route", "#/taqvim"));
+            // Kun bosilsa, dastur taqvimni aynan shu sanada ochadi
+            v.setOnClickFillInIntent(R.id.cell, new Intent().putExtra("route", "#/taqvim/" + ym + "-" + (n < 10 ? "0" : "") + n));
             return v;
         }
 
