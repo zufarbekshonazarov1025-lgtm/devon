@@ -1,7 +1,7 @@
 import { sb, S, bus, h, icon, loadBase, loadTasks, loadAll, toast, countUp } from './core.js';
 import { ReportsView, ReportDetail, pendingForMe } from './plan.js';
 import { loadExtra, runRecurrences, calShift, calGoto, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
-import { loadMore, applyTheme, Notifications, MySettings, FromText } from './more.js';
+import { loadMore, applyTheme, Notifications, MySettings, FromText, navItems } from './more.js';
 import { driveReturn } from './files.js';
 import { registerDevice } from './native.js';
 import { Login, NoProfile, Home, Tasks, TaskForm, TaskDetail, Approvals, Soon, More, Trash, needsMe } from './views.js';
@@ -54,15 +54,11 @@ document.addEventListener('touchend', () => {
 applyTheme();
 driveReturn();
 
-const NAV = [
-  ['#/bugun', 'Bugun', 'home'], ['#/ishlar', 'Ishlar', 'list'], ['#/taqvim', 'Taqvim', 'cal'],
-  ['#/tasdiq', 'Tasdiq', 'check'], ['#/hisobot', 'Hisobot', 'chart'], ['#/yana', 'Yana', 'more'],
-];
 
 function Nav(active) {
   const n = needsMe().length + pendingForMe().length;
   return h('nav', { class: 'nav', 'aria-label': 'Asosiy menyu' }, h('div', { class: 'in' },
-    NAV.map(([href, label, ic]) => h('a', { href, class: href === active ? 'on' : '', 'aria-current': href === active ? 'page' : null },
+    navItems().map(([href, label, ic]) => h('a', { href, class: href === active ? 'on' : '', 'aria-current': href === active ? 'page' : null },
       icon(ic), label, href === '#/tasdiq' && n > 0 ? h('span', { class: 'badge' }, n) : null))));
 }
 
@@ -107,7 +103,7 @@ app.addEventListener('touchend', (e) => {
   touch = null;
   if (!quick || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 2) return;
   if (location.hash === '#/taqvim') { calShift(dx < 0 ? 1 : -1); document.querySelector('.view > .card, .view > .callist, .view > .empty')?.classList.add(dx < 0 ? 'slideL' : 'slideR'); return; }
-  const i = NAV.findIndex(([href]) => href === (location.hash || '#/bugun'));
+  const NAV = navItems(), i = NAV.findIndex(([href]) => href === (location.hash || '#/bugun'));
   const next = i < 0 ? null : NAV[i + (dx < 0 ? 1 : -1)];
   if (!next) return;
   swipeDir = dx < 0 ? 1 : -1; location.hash = next[0];
@@ -124,7 +120,8 @@ function render() {
   if (!ready) return;
   if (!S.me) { app.replaceChildren(NoProfile()); return; }
   const y = window.scrollY, prev = render.last;
-  const [view, active] = route();
+  let [view, active] = route();
+  if (navItems().some(([hh]) => hh === location.hash)) active = location.hash;
   if (prev !== location.hash) { view.classList.add(swipeDir ? (swipeDir > 0 ? 'slideL' : 'slideR') : 'pagein'); swipeDir = 0; }
   app.replaceChildren(view, Nav(active));
   if (prev !== location.hash && (location.hash || '#/bugun') === '#/bugun') countUp(view);

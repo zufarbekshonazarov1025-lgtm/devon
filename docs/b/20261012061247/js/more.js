@@ -127,6 +127,35 @@ export function AchievementsCard() {
 }
 
 // ---------- Mening sozlamalarim ----------
+// ---------- Pastki menyu: o'rtadagi bo'limlarni har kim o'zi tanlaydi (shu telefonda saqlanadi) ----------
+export const NAV_CHOICES = [['#/ishlar', 'Ishlar', 'list'], ['#/taqvim', 'Taqvim', 'cal'], ['#/tasdiq', 'Tasdiq', 'check'], ['#/hisobot', 'Hisobot', 'chart'],
+  ['#/eslatmalar', 'Eslatma', 'bell'], ['#/kutilmoqda', 'Kutilmoqda', 'clock']];
+const NAV_DEFAULT = ['#/ishlar', '#/taqvim', '#/tasdiq', '#/hisobot'], NAV_MAX = 4;
+function navPick() {
+  let p = null; try { p = JSON.parse(store.get('devon_nav') || 'null'); } catch (e) { /* buzilgan */ }
+  return Array.isArray(p) && p.length ? p.filter((x) => NAV_CHOICES.some(([hh]) => hh === x)).slice(0, NAV_MAX) : NAV_DEFAULT;
+}
+export function navItems() {
+  const p = navPick();
+  return [['#/bugun', 'Bugun', 'home'], ...NAV_CHOICES.filter(([hh]) => p.includes(hh)), ['#/yana', 'Yana', 'more']];
+}
+function NavSettings() {
+  const p = navPick();
+  return [h('div', { class: 'section' }, h('h2', {}, 'Pastki menyu')),
+    h('section', { class: 'card' },
+      h('div', { class: 't-meta' }, `«Bugun» va «Yana» doim turadi. O'rtaga ${NAV_MAX} tagacha bo'limni o'zingiz tanlang.`),
+      NAV_CHOICES.map(([href, label, ic]) => {
+        const box = h('input', { type: 'checkbox', checked: p.includes(href), onchange: () => {
+          const next = box.checked ? [...p, href] : p.filter((x) => x !== href);
+          if (next.length > NAV_MAX) { box.checked = false; toast(`Ko'pi bilan ${NAV_MAX} ta. Avval bittasini olib tashlang`); return; }
+          if (!next.length) { box.checked = true; toast('Kamida bitta bo\'lim qolsin'); return; }
+          store.set('devon_nav', JSON.stringify(next)); bus.render();
+        } });
+        return h('label', { class: 'check' }, box, icon(ic, 20), href === '#/eslatmalar' ? 'Eslatmalar' : label);
+      }),
+      h('div', { class: 't-meta' }, 'Tanlov faqat shu telefonda saqlanadi.'))];
+}
+
 export function MySettings() {
   const mode = store.get('devon_mode') || 'auto', acc = store.get('devon_rang') || 'yashil';
   const prefs = S.me.prefs || {};
@@ -145,6 +174,7 @@ export function MySettings() {
       h('div', { class: 'swatches' }, Object.entries(ACCENTS).map(([k, [label, col]]) => h('button', { type: 'button', class: 'swatch' + (acc === k ? ' on' : ''), 'aria-pressed': String(acc === k), onclick: () => { store.set('devon_rang', k); applyTheme(); bus.render(); } },
         h('i', { style: `background:${col}` }), label))),
       h('div', { class: 't-meta' }, 'Ko\'rinish faqat shu qurilmada saqlanadi.')),
+    NavSettings(),
     h('div', { class: 'section' }, h('h2', {}, 'Bildirishnomalar')),
     h('section', { class: 'card' },
       h('label', { class: 'check' }, quiet, 'Tinch soatlarda bezovta qilinmasin'),
@@ -261,9 +291,35 @@ export function exportSheets() {
     ...S.reports.filter((r) => r.status !== 'qoralama').map((r) => [DOC[r.doc_type], PER[r.period], fmtDate(r.period_start), fmtDate(r.period_end), ST[r.status], r.sent_at ? fmtDateTime(r.sent_at) : '', r.on_time === false ? 'Yo\'q' : r.on_time ? 'Ha' : '', r.approved_at ? fmtDateTime(r.approved_at) : '', r.approver_comment || '', r.body || ''])];
   return [['Topshiriqlar', tasks], ['Reja', plan], ['Hisobotlar', reps]];
 }
-export function downloadExcel() {
-  const blob = buildXlsx(exportSheets()), url = URL.createObjectURL(blob);
-  const a = h('a', { href: url, download: `Devon_${today()}.xlsx` }); document.body.append(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-  toast('Excel fayl yuklab olindi');
+let exporting = false;
+export async function downloadExcel() {
+  const blob = buildXlsx(exportSheets()), name = `Devon_${today()}.xlsx`;
+  const drive = S.settings.drive && S.settings.drive.connected;
+  if (!drive) {
+    // Drive ulanmagan bo'lsa (kompyuterdagi brauzer) — oddiy yuklab olish
+    const url = URL.createObjectURL(blob);
+    const a = h('a', { href: url, download: name }); document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('Excel fayl yuklab olindi'); return;
+  }
+  // Telefondagi ilova faylni o'zi saqlay olmaydi: Google Drive'ga joylab, o'sha yerda ochamiz
+  if (exporting) return;
+  exporting = true; toast('Excel fayl Google Drive\'ga joylanmoqda…');
+  try {
+    const data = await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = bad; r.readAsDataURL(blob); });
+    const { data: res, error } = await sb.functions.invoke('eksport', { body: { name, data } });
+    if (error || !res || !res.url) {
+      let msg = 'Drive\'ga joylab bo\'lmadi';
+      try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch (e) { /* matn yo'q */ }
+      toast(msg); return;
+    }
+    const close = () => ov.remove();
+    const ov = h('div', { class: 'overlay', onclick: (e) => { if (e.target === ov) close(); } },
+      h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true' },
+        h('h2', {}, 'Excel fayl tayyor'),
+        h('p', { class: 't-meta' }, `«${res.name}» Google Drive'dagi «Devon fayllari» papkasiga joylandi.`),
+        h('a', { class: 'btn', href: res.url, target: '_blank', rel: 'noopener', onclick: () => setTimeout(close, 300) }, 'Drive\'da ochish'),
+        h('button', { class: 'btn ghost', type: 'button', onclick: close }, 'Yopish')));
+    document.body.append(ov);
+  } finally { exporting = false; }
 }
