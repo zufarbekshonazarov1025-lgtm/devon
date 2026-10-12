@@ -3,7 +3,7 @@ import { DriveCard } from './files.js';
 import { sb, S, bus, h, icon, toast, confirmBox, today, iso, fmtDate, fmtDateTime, isOpen, nameOf, go, Head, BackHead, Empty,
   addDays, mondayOf, monthStart, monthEnd, fmtDay, monthName, loadTasks, loadBase, ping } from './core.js';
 
-S.events = []; S.reminders = []; S.recs = [];
+S.events = []; S.reminders = []; S.recs = []; S.acks = [];
 const HAFTA_Q = ['Du', 'Se', 'Ch', 'Pa', 'Ju', 'Sh', 'Ya'];
 const HAFTA_T = ['Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba', 'Yakshanba'];
 const wd = (s) => ((new Date(s + 'T12:00:00').getDay() + 6) % 7) + 1; // 1 = dushanba … 7 = yakshanba
@@ -12,11 +12,13 @@ const localDay = (ts) => iso(new Date(ts));
 const localTime = (ts) => { const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
 export async function loadExtra() {
-  const [ev, rm, rc] = await Promise.all([
+  const [ev, rm, rc, ak] = await Promise.all([
     sb.from('events').select('*').order('starts_at'),
     sb.from('reminders').select('*').order('created_at'),
     sb.from('recurrences').select('*').order('created_at'),
+    sb.from('reminder_acks').select('*').order('created_at', { ascending: false }),
   ]);
+  if (!ak.error) S.acks = ak.data || [];
   if (!ev.error) S.events = ev.data || [];
   if (!rm.error) S.reminders = rm.data || [];
   if (!rc.error) S.recs = rc.data || [];
@@ -197,6 +199,54 @@ function reminderText(r) {
   if (r.repeat === 'oylik') return `Har oyning ${r.monthday}-kuni ${t}`;
   return r.remind_at ? `${fmtDate(localDay(r.remind_at))} ${localTime(r.remind_at)}` : '—';
 }
+// ---------- «Qabul qildim»: eslatma vaqti kelgach, javob berilmaguncha kutib turadi ----------
+const remTime = (r) => (r.repeat === 'yoq' ? (r.remind_at ? localTime(r.remind_at) : '00:00') : (r.at_time || '09:00').slice(0, 5));
+const remMine = (r) => r.owner_id === S.me.id || r.for_both;
+export const ackOf = (r, d) => S.acks.find((a) => a.reminder_id === r.id && a.occ_date === d);
+/** Vaqti o'tgan, lekin hali qabul qilinmagan eslatmalar (takroriylari uchun oxirgi 7 kun). */
+export function pendingReminders() {
+  const out = [], now = new Date(), t = today();
+  for (const r of S.reminders) {
+    if (!r.active || !remMine(r)) continue;
+    const created = new Date(r.created_at);
+    if (r.repeat === 'yoq') {
+      if (!r.remind_at) continue;
+      const at = new Date(r.remind_at), d = localDay(r.remind_at);
+      if (at <= now && !ackOf(r, d)) out.push({ r, d, time: localTime(r.remind_at) });
+      continue;
+    }
+    for (let d = addDays(t, -6); d <= t; d = addDays(d, 1)) {
+      const at = new Date(`${d}T${remTime(r)}:00`);
+      if (reminderOn(r, d) && at <= now && at >= created && !ackOf(r, d)) out.push({ r, d, time: remTime(r) });
+    }
+  }
+  // Bitta eslatmaning bir necha kuni qabul qilinmagan bo'lsa — bitta kartada, oxirgi kuni bilan
+  const by = new Map();
+  for (const x of out) { const g = by.get(x.r.id); if (g) { g.days.push(x.d); g.d = x.d; g.time = x.time; } else by.set(x.r.id, { ...x, days: [x.d] }); }
+  return [...by.values()].sort((a, b) => (a.d + a.time).localeCompare(b.d + b.time));
+}
+export async function ackReminder(r, days) {
+  const { error } = await sb.from('reminder_acks').insert(days.map((d) => ({ reminder_id: r.id, occ_date: d, user_id: S.me.id })));
+  if (error && !/duplicate/i.test(error.message)) { toast('Saqlab bo\'lmadi: ' + error.message); return; }
+  toast('Qabul qilindi'); await loadExtra(); bus.render();
+}
+async function unackReminder(a) {
+  const { error } = await sb.from('reminder_acks').delete().eq('id', a.id);
+  if (error) { toast('Bekor qilib bo\'lmadi'); return; }
+  await loadExtra(); bus.render();
+}
+/** Qabul qilinmagan eslatma kartasi (bosh sahifa va eslatmalar sahifasida). */
+export function PendingReminderCard({ r, d, time, days }) {
+  const late = d < today(), missed = days.filter((x) => x !== d);
+  return h('article', { class: 'card' },
+    h('div', {},
+      h('div', { class: 't-meta c-amber', style: 'font-weight:700' }, `Eslatma · ${late ? fmtDate(d) + ' ' : 'bugun '}${time}` + (late ? ' · qabul qilinmagan' : '')),
+      h('div', { class: 't-title', style: 'margin-top:4px' }, r.title),
+      h('div', { class: 't-meta', style: 'margin-top:4px' }, [nameOf(r.owner_id, true), r.for_both && 'ikkalamizga', reminderText(r)].filter(Boolean).join(' · ')),
+      missed.length ? h('div', { class: 't-meta c-red', style: 'margin-top:4px;font-weight:600' }, `Oldin ham qabul qilinmagan: ${missed.map((x) => fmtDate(x).slice(0, 5)).join(', ')}`) : null),
+    h('button', { class: 'btn', type: 'button', onclick: () => ackReminder(r, days) }, 'Qabul qildim'));
+}
+
 async function reminderForm(r) {
   const v = await form({ title: r ? 'Eslatmani tahrirlash' : 'Yangi eslatma', onDelete: !!r, fields: [
     { id: 'title', label: 'Nimani eslatish', required: true, value: r?.title },
@@ -220,23 +270,35 @@ async function reminderForm(r) {
   await loadExtra(); toast('Saqlandi'); bus.render();
 }
 export function Reminders() {
+  const pend = pendingReminders();
+  const lastAck = (r) => S.acks.find((a) => a.reminder_id === r.id);
   const card = (r) => {
-    const mine = r.owner_id === S.me.id;
+    const mine = r.owner_id === S.me.id, a = lastAck(r);
+    const ackText = a ? `${r.repeat === 'yoq' ? 'Qabul qilindi' : 'Oxirgi marta qabul qilindi'}: ${fmtDateTime(a.created_at)} · ${nameOf(a.user_id, true)}` : '';
     return h('article', { class: 'card', style: 'flex-direction:row;align-items:center;gap:12px' },
-      h('span', { class: 'itile amber' }, icon('bell', 20)),
+      h('span', { class: 'itile ' + (a && r.repeat === 'yoq' ? 'green' : 'amber') }, icon(a && r.repeat === 'yoq' ? 'check' : 'bell', 20)),
       h(mine ? 'button' : 'div', { type: mine ? 'button' : null, class: 'plainbtn', style: 'flex:1;min-width:0', onclick: mine ? () => reminderForm(r) : null },
         h('b', { class: 't-title', style: `display:block;${r.active ? '' : 'color:var(--muted)'}` }, r.title),
-        h('span', { class: 't-meta' }, [reminderText(r), nameOf(r.owner_id, true), r.for_both && 'ikkalamizga', r.is_private && 'shaxsiy', !r.active && 'o\'chirilgan'].filter(Boolean).join(' · '))),
-      mine && h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: r.active, 'aria-label': `«${r.title}» yoqilgan`, onchange: async (e) => {
-        const { error } = await sb.from('reminders').update({ active: e.target.checked }).eq('id', r.id);
-        if (error) toast('Saqlab bo\'lmadi'); await loadExtra(); bus.render();
-      } })));
+        h('span', { class: 't-meta' }, [reminderText(r), nameOf(r.owner_id, true), r.for_both && 'ikkalamizga', r.is_private && 'shaxsiy', !r.active && 'o\'chirilgan'].filter(Boolean).join(' · ')),
+        ackText && h('span', { class: 't-meta', style: 'display:block;color:var(--brand)' }, ackText)),
+      a && r.repeat === 'yoq' && a.user_id === S.me.id
+        ? h('button', { class: 'btn ghost small', type: 'button', onclick: () => unackReminder(a) }, 'Qaytarish')
+        : mine && h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: r.active, 'aria-label': `«${r.title}» yoqilgan`, onchange: async (e) => {
+          const { error } = await sb.from('reminders').update({ active: e.target.checked }).eq('id', r.id);
+          if (error) toast('Saqlab bo\'lmadi'); await loadExtra(); bus.render();
+        } })));
   };
+  // Bir martalik va qabul qilingan eslatmalar pastga — «Bajarilganlar»ga tushadi
+  const doneOnce = (r) => r.repeat === 'yoq' && r.remind_at && ackOf(r, localDay(r.remind_at));
+  const active = S.reminders.filter((r) => !doneOnce(r)), done = S.reminders.filter(doneOnce);
   return h('main', { class: 'view' },
     BackHead('Eslatmalar', '#/yana'),
-    h('div', { class: 'banner' }, 'Eslatmalar taqvimda ko\'rinadi. Telefonga bildirishnoma bo\'lib kelishi dastur APK qilib o\'rnatilgandan keyin ishlaydi.'),
-    S.reminders.length ? S.reminders.map(card) : Empty('Eslatma yo\'q', 'Birinchisini qo\'shing.'),
-    h('button', { class: 'btn', type: 'button', onclick: () => reminderForm(null) }, '+ Eslatma qo\'shish'));
+    pend.length ? [h('div', { class: 'section' }, h('h2', {}, 'Qabul qilinmagan'), h('span', { class: 'chip red' }, pend.length)), pend.map(PendingReminderCard)] : null,
+    h('div', { class: 'section' }, h('h2', {}, 'Eslatmalar')),
+    active.length ? active.map(card) : Empty('Eslatma yo\'q', 'Birinchisini qo\'shing.'),
+    h('button', { class: 'btn', type: 'button', onclick: () => reminderForm(null) }, '+ Eslatma qo\'shish'),
+    h('div', { class: 't-meta' }, 'Vaqti kelgan eslatma «Qabul qildim» bosilmaguncha bosh sahifada «Sizdan javob kutmoqda» qismida turadi. Takrorlanadigan eslatma har safar alohida qabul qilinadi.'),
+    done.length ? [h('div', { class: 'section' }, h('h2', {}, 'Bajarilganlar')), done.map(card)] : null);
 }
 
 // ---------- Takrorlanuvchi topshiriqlar ----------
