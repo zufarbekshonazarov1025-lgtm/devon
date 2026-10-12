@@ -3,7 +3,7 @@ import { sb, S, bus, h, icon, toast, ask, confirmBox, today, fmtDate, fmtDateTim
 import { Files } from './files.js';
 import { unregisterDevice } from './native.js';
 import { Bell, HomeKudos, StreakChip, KudosBlock, downloadExcel } from './more.js';
-import { pendingReminders, PendingReminderCard } from './extra.js';
+import { pendingReminders, PendingReminderCard, pendingDueTasks, DueSummaryCard } from './extra.js';
 import { HomePlan, RequestCard, pendingForMe, mySentRequests, askDecision, askReschedule, SentCard } from './plan.js';
 
 export function TaskCard(t) {
@@ -95,9 +95,10 @@ export function Home() {
 
   // Kuniga bir marta tabriklaymiz
   if (barokat) { try { const k = 'devon_barokat_' + me.id; if (localStorage.getItem(k) !== today()) { localStorage.setItem(k, today()); setTimeout(() => celebrate('barokat'), 300); } } catch (e) { /* xotira yopiq bo'lsa tabriksiz */ } }
-  const reqs = pendingForMe(), rems = pendingReminders();
-  const waitingBlock = waiting.length + reqs.length + rems.length ? [
-    h('div', { class: 'section' }, h('h2', {}, 'Sizdan javob kutmoqda'), h('span', { class: 'chip red' }, waiting.length + reqs.length + rems.length)),
+  const reqs = pendingForMe(), rems = pendingReminders(), dues = pendingDueTasks();
+  const waitingBlock = waiting.length + reqs.length + rems.length + dues.length ? [
+    h('div', { class: 'section' }, h('h2', {}, 'Sizdan javob kutmoqda'), h('span', { class: 'chip red' }, waiting.length + reqs.length + rems.length + (dues.length ? 1 : 0))),
+    dues.length ? DueSummaryCard(dues) : null,
     rems.map(PendingReminderCard),
     reqs.map((r) => RequestCard(r)),
     waiting.map((t) => WaitCard(t)),

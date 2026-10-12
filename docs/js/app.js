@@ -1,6 +1,6 @@
 import { sb, S, bus, h, icon, loadBase, loadTasks, loadAll, toast, countUp } from './core.js';
 import { ReportsView, ReportDetail, pendingForMe } from './plan.js';
-import { loadExtra, runRecurrences, calShift, calGoto, pendingReminders, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
+import { loadExtra, runRecurrences, calShift, calGoto, pendingReminders, pendingDueTasks, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
 import { loadMore, applyTheme, Notifications, MySettings, FromText, navItems } from './more.js';
 import { driveReturn } from './files.js';
 import { registerDevice } from './native.js';
@@ -132,7 +132,7 @@ function render() {
 bus.render = render;
 // Eslatma vaqti kelganda ochiq ekran ham yangilansin (daqiqasiga bir tekshiramiz)
 let remCount = -1;
-setInterval(() => { if (!S.me || !ready) return; const n = pendingReminders().length; if (n !== remCount) { const first = remCount < 0; remCount = n; if (!first && !busy()) render(); } }, 60000);
+setInterval(() => { if (!S.me || !ready) return; const n = pendingReminders().length * 1000 + pendingDueTasks().length; if (n !== remCount) { const first = remCount < 0; remCount = n; if (!first && !busy()) render(); } }, 60000);
 window.addEventListener('hashchange', render);
 
 /** Foydalanuvchi yozayotgan yoki oyna ochiq bo'lsa, ekranni o'zidan-o'zi yangilamaymiz. */
@@ -155,7 +155,7 @@ async function start(session) {
     let timer;
     const refresh = () => { clearTimeout(timer); timer = setTimeout(async () => { await Promise.all([loadAll(), loadExtra(), loadMore()]); if (!busy()) render(); }, 400); };
     channel = sb.channel('devon-data');
-    for (const table of ['tasks', 'plan_items', 'requests', 'reports', 'events', 'reminders', 'reminder_acks', 'notifications']) channel.on('postgres_changes', { event: '*', schema: 'public', table }, refresh);
+    for (const table of ['tasks', 'plan_items', 'requests', 'reports', 'events', 'reminders', 'reminder_acks', 'task_due_acks', 'notifications']) channel.on('postgres_changes', { event: '*', schema: 'public', table }, refresh);
     channel.subscribe();
   }
 }

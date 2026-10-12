@@ -2,9 +2,9 @@ import { TaskCard } from './views.js';
 import { DriveCard } from './files.js';
 import { nudge } from './native.js';
 import { sb, S, bus, h, icon, toast, confirmBox, today, iso, fmtDate, fmtDateTime, isOpen, nameOf, go, Head, BackHead, Empty,
-  addDays, mondayOf, monthStart, monthEnd, fmtDay, monthName, loadTasks, loadBase, ping } from './core.js';
+  addDays, mondayOf, monthStart, monthEnd, fmtDay, monthName, loadTasks, loadBase, ping, owner, daysLeft, dueChip } from './core.js';
 
-S.events = []; S.reminders = []; S.recs = []; S.acks = [];
+S.events = []; S.reminders = []; S.recs = []; S.acks = []; S.dueAcks = [];
 const HAFTA_Q = ['Du', 'Se', 'Ch', 'Pa', 'Ju', 'Sh', 'Ya'];
 const HAFTA_T = ['Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba', 'Yakshanba'];
 const wd = (s) => ((new Date(s + 'T12:00:00').getDay() + 6) % 7) + 1; // 1 = dushanba … 7 = yakshanba
@@ -13,13 +13,15 @@ const localDay = (ts) => iso(new Date(ts));
 const localTime = (ts) => { const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
 export async function loadExtra() {
-  const [ev, rm, rc, ak] = await Promise.all([
+  const [ev, rm, rc, ak, da] = await Promise.all([
     sb.from('events').select('*').order('starts_at'),
     sb.from('reminders').select('*').order('created_at'),
     sb.from('recurrences').select('*').order('created_at'),
     sb.from('reminder_acks').select('*').order('created_at', { ascending: false }),
+    sb.from('task_due_acks').select('*').gte('occ_date', addDays(today(), -7)).order('created_at', { ascending: false }),
   ]);
   if (!ak.error) S.acks = ak.data || [];
+  if (!da.error) S.dueAcks = da.data || [];
   if (!ev.error) S.events = ev.data || [];
   if (!rm.error) S.reminders = rm.data || [];
   if (!rc.error) S.recs = rc.data || [];
@@ -250,6 +252,48 @@ export function PendingReminderCard({ r, d, time, days }) {
     h('button', { class: 'btn', type: 'button', onclick: () => ackReminder(r, days) }, 'Qabul qildim'));
 }
 
+// ---------- Muddati yaqin topshiriqlar: muddatiga 3 kundan kam qolgan yoki o'tib ketgan ochiq ishlar ----------
+// Har kim o'z ishlarini, yordamchi (admin) esa ikkalasinikini har kuni ertalab «Qabul qildim» qiladi.
+const DUE_DAYS = 2, DUE_FROM_HOUR = 8;
+export function dueTasks() {
+  const me = S.me.id, all = me === owner().id;
+  return S.tasks.filter((t) => isOpen(t) && t.status !== 'tekshiruvda' && !t.deleted_at && daysLeft(t.due_date) <= DUE_DAYS && (all || t.assignee_id === me))
+    .sort((a, b) => a.due_date.localeCompare(b.due_date) || a.seq - b.seq);
+}
+export const dueAckOf = (t) => S.dueAcks.find((a) => a.task_id === t.id && a.occ_date === today() && a.user_id === S.me.id);
+/** Bugun hali qabul qilinmagan muddati yaqin ishlar (ertalab soat 8 dan). */
+export function pendingDueTasks() {
+  if (new Date().getHours() < DUE_FROM_HOUR) return [];
+  return dueTasks().filter((t) => !dueAckOf(t));
+}
+async function ackDue(list) {
+  const { error } = await sb.from('task_due_acks').insert(list.map((t) => ({ task_id: t.id, occ_date: today(), user_id: S.me.id })));
+  if (error && !/duplicate/i.test(error.message)) { toast('Saqlab bo\'lmadi: ' + error.message); return; }
+  toast('Qabul qilindi'); await loadExtra(); bus.render();
+}
+/** Muddati yaqin topshiriq kartasi: bosilsa topshiriq ochiladi; bugun qabul qilinmagan bo'lsa tugma chiqadi. */
+export function DueTaskCard(t) {
+  const c = dueChip(t), a = dueAckOf(t), late = daysLeft(t.due_date) < 0;
+  return h('article', { class: 'card' },
+    h('div', {},
+      h('div', { class: 't-meta ' + (late ? 'c-red' : 'c-amber'), style: 'font-weight:700' }, `Muddati yaqin · ${c.label}`),
+      h('a', { class: 't-title', href: `#/ish/${t.id}`, style: 'color:inherit;display:block;margin-top:4px' }, `№${t.seq} · ${t.title}`),
+      h('div', { class: 't-meta', style: 'margin-top:4px' }, `Muddat ${fmtDate(t.due_date)} · bajaruvchi ${nameOf(t.assignee_id, true)}`),
+      a ? h('div', { class: 't-meta', style: 'margin-top:4px;color:var(--brand)' }, `Bugun qabul qilindi: ${fmtDateTime(a.created_at).slice(-5)}`) : null),
+    a || new Date().getHours() < DUE_FROM_HOUR ? null : h('button', { class: 'btn', type: 'button', onclick: () => ackDue([t]) }, 'Qabul qildim'));
+}
+/** Bosh sahifa uchun: bir nechtasi bo'lsa ham bitta kartada, hammasini birdan qabul qilish mumkin. */
+export function DueSummaryCard(list) {
+  if (list.length === 1) return DueTaskCard(list[0]);
+  return h('article', { class: 'card' },
+    h('div', {},
+      h('div', { class: 't-meta c-red', style: 'font-weight:700' }, `Muddati yaqin topshiriqlar · ${list.length} ta`),
+      list.map((t) => h('a', { href: `#/ish/${t.id}`, class: 't-meta', style: 'display:block;margin-top:6px;color:var(--ink)' },
+        h('b', { class: daysLeft(t.due_date) < 0 ? 'c-red' : 'c-amber' }, dueChip(t).label), ` · №${t.seq} ${t.title}`,
+        t.assignee_id !== S.me.id ? ` · ${nameOf(t.assignee_id, true)}` : ''))),
+    h('button', { class: 'btn', type: 'button', onclick: () => ackDue(list) }, 'Hammasini qabul qildim'));
+}
+
 async function reminderForm(r) {
   const v = await form({ title: r ? 'Eslatmani tahrirlash' : 'Yangi eslatma', onDelete: !!r, fields: [
     { id: 'title', label: 'Nimani eslatish', required: true, value: r?.title },
@@ -294,8 +338,11 @@ export function Reminders() {
   // Bir martalik va qabul qilingan eslatmalar pastga — «Bajarilganlar»ga tushadi
   const doneOnce = (r) => r.repeat === 'yoq' && r.remind_at && ackOf(r, localDay(r.remind_at));
   const active = S.reminders.filter((r) => !doneOnce(r)), done = S.reminders.filter(doneOnce);
+  const due = dueTasks();
   return h('main', { class: 'view' },
     BackHead('Eslatmalar', '#/yana'),
+    due.length ? [h('div', { class: 'section' }, h('h2', {}, 'Muddati yaqin topshiriqlar'), h('span', { class: 'chip red' }, due.length)), due.map(DueTaskCard),
+      h('div', { class: 't-meta' }, 'Muddatiga 3 kundan kam qolgan va muddati o\'tgan ochiq topshiriqlar. Har kuni ertalab qayta qabul qilinadi; bajarilsa yoki muddati surilsa, o\'zi chiqib ketadi.')] : null,
     pend.length ? [h('div', { class: 'section' }, h('h2', {}, 'Qabul qilinmagan'), h('span', { class: 'chip red' }, pend.length)), pend.map(PendingReminderCard)] : null,
     h('div', { class: 'section' }, h('h2', {}, 'Eslatmalar')),
     active.length ? active.map(card) : Empty('Eslatma yo\'q', 'Birinchisini qo\'shing.'),
