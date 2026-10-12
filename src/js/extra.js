@@ -1,5 +1,6 @@
 import { TaskCard } from './views.js';
 import { DriveCard } from './files.js';
+import { nudge } from './native.js';
 import { sb, S, bus, h, icon, toast, confirmBox, today, iso, fmtDate, fmtDateTime, isOpen, nameOf, go, Head, BackHead, Empty,
   addDays, mondayOf, monthStart, monthEnd, fmtDay, monthName, loadTasks, loadBase, ping } from './core.js';
 
@@ -91,8 +92,8 @@ export function dayItems(d) {
   for (const e of S.events) if (eventOn(e, d) && mine(e.owner_id))
     out.push({ kind: 'uchrashuv', time: e.all_day ? '' : localTime(e.starts_at), title: e.title, who: e.owner_id, ev: e,
       sub: [e.all_day ? 'Kun bo\'yi' : localTime(e.starts_at) + (e.ends_at ? '–' + localTime(e.ends_at) : ''), e.location, e.with_whom && 'bilan: ' + e.with_whom, e.repeat !== 'yoq' && REPEAT[e.repeat].toLowerCase()].filter(Boolean).join(' · ') });
-  for (const r of S.reminders) if (reminderOn(r, d) && (mine(r.owner_id) || r.for_both))
-    out.push({ kind: 'eslatma', time: r.repeat === 'yoq' ? (r.remind_at ? localTime(r.remind_at) : '') : (r.at_time || '').slice(0, 5), title: r.title, who: r.owner_id, sub: 'Eslatma' + (r.for_both ? ' · ikkalamizga' : ''), href: '#/eslatmalar' });
+  for (const r of S.reminders) if (reminderOn(r, d) && (mine(r.for_id || r.owner_id) || r.for_both))
+    out.push({ kind: 'eslatma', time: r.repeat === 'yoq' ? (r.remind_at ? localTime(r.remind_at) : '') : (r.at_time || '').slice(0, 5), title: r.title, who: r.for_id || r.owner_id, sub: 'Eslatma' + (r.for_both ? ' · ikkalamizga' : ''), href: '#/eslatmalar' });
   for (const r of S.recs) if (r.active && r.next_run === d && mine(r.assignee_id))
     out.push({ kind: 'takror', time: '', title: r.title, who: r.assignee_id, sub: 'Takrorlanuvchi topshiriq ochiladi', href: '#/takror' });
   return out.sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
@@ -201,7 +202,9 @@ function reminderText(r) {
 }
 // ---------- «Qabul qildim»: eslatma vaqti kelgach, javob berilmaguncha kutib turadi ----------
 const remTime = (r) => (r.repeat === 'yoq' ? (r.remind_at ? localTime(r.remind_at) : '00:00') : (r.at_time || '09:00').slice(0, 5));
-const remMine = (r) => r.owner_id === S.me.id || r.for_both;
+/** Eslatma menga tegishlimi: o'zimga qo'yganim, menga qo'yilgani yoki ikkalamizga. */
+const remMine = (r) => r.for_both || (r.for_id ? r.for_id === S.me.id : r.owner_id === S.me.id);
+export const remFor = (r) => r.for_id || r.owner_id;
 export const ackOf = (r, d) => S.acks.find((a) => a.reminder_id === r.id && a.occ_date === d);
 /** Vaqti o'tgan, lekin hali qabul qilinmagan eslatmalar (takroriylari uchun oxirgi 7 kun). */
 export function pendingReminders() {
@@ -228,7 +231,7 @@ export function pendingReminders() {
 export async function ackReminder(r, days) {
   const { error } = await sb.from('reminder_acks').insert(days.map((d) => ({ reminder_id: r.id, occ_date: d, user_id: S.me.id })));
   if (error && !/duplicate/i.test(error.message)) { toast('Saqlab bo\'lmadi: ' + error.message); return; }
-  toast('Qabul qilindi'); await loadExtra(); bus.render();
+  toast('Qabul qilindi'); nudge(); await loadExtra(); bus.render();
 }
 async function unackReminder(a) {
   const { error } = await sb.from('reminder_acks').delete().eq('id', a.id);
@@ -242,7 +245,7 @@ export function PendingReminderCard({ r, d, time, days }) {
     h('div', {},
       h('div', { class: 't-meta c-amber', style: 'font-weight:700' }, `Eslatma · ${late ? fmtDate(d) + ' ' : 'bugun '}${time}` + (late ? ' · qabul qilinmagan' : '')),
       h('div', { class: 't-title', style: 'margin-top:4px' }, r.title),
-      h('div', { class: 't-meta', style: 'margin-top:4px' }, [nameOf(r.owner_id, true), r.for_both && 'ikkalamizga', reminderText(r)].filter(Boolean).join(' · ')),
+      h('div', { class: 't-meta', style: 'margin-top:4px' }, [r.for_id && r.for_id !== r.owner_id ? `${nameOf(r.owner_id, true)} qo'ydi` : nameOf(r.owner_id, true), r.for_both && 'ikkalamizga', reminderText(r)].filter(Boolean).join(' · ')),
       missed.length ? h('div', { class: 't-meta c-red', style: 'margin-top:4px;font-weight:600' }, `Oldin ham qabul qilinmagan: ${missed.map((x) => fmtDate(x).slice(0, 5)).join(', ')}`) : null),
     h('button', { class: 'btn', type: 'button', onclick: () => ackReminder(r, days) }, 'Qabul qildim'));
 }
@@ -256,18 +259,18 @@ async function reminderForm(r) {
     { id: 'monthday', label: 'Oyning nechanchi kuni', type: 'number', min: 1, max: 31, required: true, value: r?.monthday || dom(today()), show: (x) => x.repeat === 'oylik' },
     { id: 'time', label: 'Vaqt', type: 'time', required: true, value: r ? (r.repeat === 'yoq' && r.remind_at ? localTime(r.remind_at) : (r.at_time || '09:00').slice(0, 5)) : '09:00' },
     { id: 'for_both', label: 'Ikkalamizga eslatilsin', type: 'check', value: r?.for_both },
-    { id: 'is_private', label: 'Faqat menga ko\'rinsin', type: 'check', value: r?.is_private },
+    { id: 'is_private', label: 'Faqat menga ko\'rinsin', type: 'check', value: r?.is_private, show: (x) => !x.for_both },
   ] });
   if (!v) return;
   if (v.__delete) { const { error } = await sb.from('reminders').delete().eq('id', r.id); if (error) { toast('O\'chirib bo\'lmadi'); return; } await loadExtra(); bus.render(); return; }
   const md = Number(v.monthday);
   if (v.repeat === 'oylik' && !(md >= 1 && md <= 31)) { toast('Oy kuni 1 dan 31 gacha bo\'lishi kerak'); return; }
-  const row = { title: v.title, repeat: v.repeat, at_time: v.time, for_both: v.for_both && !v.is_private, is_private: v.is_private,
+  const row = { title: v.title, repeat: v.repeat, at_time: v.time, for_both: !!v.for_both, is_private: !v.for_both && !!v.is_private,
     remind_at: v.repeat === 'yoq' ? new Date(`${v.date}T${v.time}:00`).toISOString() : null,
     weekday: v.repeat === 'haftalik' ? Number(v.weekday) : null, monthday: v.repeat === 'oylik' ? md : null };
   const { error } = r ? await sb.from('reminders').update(row).eq('id', r.id) : await sb.from('reminders').insert({ ...row, owner_id: S.me.id, active: true });
   if (error) { toast('Saqlab bo\'lmadi: ' + error.message); return; }
-  await loadExtra(); toast('Saqlandi'); bus.render();
+  nudge(); await loadExtra(); toast('Saqlandi'); bus.render();
 }
 export function Reminders() {
   const pend = pendingReminders();
@@ -279,7 +282,7 @@ export function Reminders() {
       h('span', { class: 'itile ' + (a && r.repeat === 'yoq' ? 'green' : 'amber') }, icon(a && r.repeat === 'yoq' ? 'check' : 'bell', 20)),
       h(mine ? 'button' : 'div', { type: mine ? 'button' : null, class: 'plainbtn', style: 'flex:1;min-width:0', onclick: mine ? () => reminderForm(r) : null },
         h('b', { class: 't-title', style: `display:block;${r.active ? '' : 'color:var(--muted)'}` }, r.title),
-        h('span', { class: 't-meta' }, [reminderText(r), nameOf(r.owner_id, true), r.for_both && 'ikkalamizga', r.is_private && 'shaxsiy', !r.active && 'o\'chirilgan'].filter(Boolean).join(' · ')),
+        h('span', { class: 't-meta' }, [reminderText(r), r.for_id && r.for_id !== r.owner_id ? `${nameOf(r.owner_id, true)} → ${nameOf(r.for_id, true)}` : nameOf(r.owner_id, true), r.for_both && 'ikkalamizga', r.is_private && 'shaxsiy', !r.active && 'o\'chirilgan'].filter(Boolean).join(' · ')),
         ackText && h('span', { class: 't-meta', style: 'display:block;color:var(--brand)' }, ackText)),
       a && r.repeat === 'yoq' && a.user_id === S.me.id
         ? h('button', { class: 'btn ghost small', type: 'button', onclick: () => unackReminder(a) }, 'Qaytarish')
