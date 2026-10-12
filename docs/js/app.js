@@ -26,6 +26,31 @@ window.addEventListener('touchmove', (e) => {
   if (Math.abs(e.touches[0].clientY - dragY) > 24) { a.blur(); dragY = null; }
 }, { passive: true });
 
+// Pastdan chiqqan oynani barmoq bilan pastga tortib yopish (fonni bosgandek — hech narsa saqlanmaydi)
+let pull = null;
+document.addEventListener('touchstart', (e) => {
+  const sh = e.target.closest && e.target.closest('.sheet');
+  pull = null;
+  if (!sh || e.touches.length !== 1 || sh.scrollTop > 0 || e.target.closest('textarea, select, input[type=range]')) return;
+  pull = { sh, y: e.touches[0].clientY, dy: 0, at: Date.now() };
+}, { passive: true });
+document.addEventListener('touchmove', (e) => {
+  if (!pull) return;
+  const dy = Math.max(0, e.touches[0].clientY - pull.y), sh = pull.sh;
+  pull.dy = dy;
+  sh.style.animation = 'none'; sh.style.transition = 'none';
+  sh.style.transform = dy ? `translateY(${dy}px)` : '';
+}, { passive: true });
+document.addEventListener('touchend', () => {
+  if (!pull) return;
+  const { sh, dy, at } = pull; pull = null;
+  if (!dy) return;
+  if (dy > Math.min(140, sh.offsetHeight * 0.25) || (dy > 50 && Date.now() - at < 300)) {
+    sh.style.transition = 'transform .18s ease-in'; sh.style.transform = 'translateY(110%)';
+    setTimeout(() => { const ov = sh.closest('.overlay'); if (ov) ov.dispatchEvent(new MouseEvent('click', { bubbles: true })); }, 170);
+  } else { sh.style.transition = 'transform .2s ease'; sh.style.transform = ''; }
+}, { passive: true });
+
 applyTheme();
 driveReturn();
 
