@@ -7,6 +7,25 @@ import { registerDevice } from './native.js';
 import { Login, NoProfile, Home, Tasks, TaskForm, TaskDetail, Approvals, Soon, More, Trash, needsMe } from './views.js';
 
 const app = document.getElementById('app');
+
+// Uzun sahifada pastga tushganda «Tepaga» tugmasi chiqadi
+// (sahifani ba'zan window, ba'zan body suradi — ikkalasini ham hisobga olamiz)
+const scrolled = () => Math.max(window.scrollY, document.body.scrollTop, document.documentElement.scrollTop);
+const upBtn = h('button', { class: 'totop', type: 'button', onclick: () => { for (const el of [window, document.body, document.documentElement]) el.scrollTo({ top: 0, behavior: 'smooth' }); } }, '↑ Tepaga');
+document.body.append(upBtn);
+function showUp() { upBtn.classList.toggle('on', !!S.session && scrolled() > 500); }
+document.addEventListener('scroll', showUp, { passive: true, capture: true });
+
+// Sahifa surilsa, ochiq klaviatura va maydon ostidagi tavsiyalar yopiladi
+let dragY = null;
+window.addEventListener('touchstart', (e) => { dragY = e.touches.length === 1 ? e.touches[0].clientY : null; }, { passive: true });
+window.addEventListener('touchmove', (e) => {
+  const a = document.activeElement;
+  if (dragY === null || !a || !a.matches('input, textarea, select')) return;
+  if (a.tagName === 'TEXTAREA' && a.contains(e.target)) return; // uzun matn ichida surish — yozishni to'xtatmaymiz
+  if (Math.abs(e.touches[0].clientY - dragY) > 24) { a.blur(); dragY = null; }
+}, { passive: true });
+
 applyTheme();
 driveReturn();
 
@@ -85,6 +104,7 @@ function render() {
   if (prev !== location.hash && (location.hash || '#/bugun') === '#/bugun') countUp(view);
   render.last = location.hash;
   window.scrollTo(0, prev === location.hash ? y : 0);
+  showUp();
 }
 bus.render = render;
 window.addEventListener('hashchange', render);
