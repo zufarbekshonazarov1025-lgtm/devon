@@ -43,6 +43,10 @@ a.card { color: var(--ink); }
 .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .tile { background: var(--card); border: none; border-radius: 14px; padding: 10px; min-height: 60px; display: flex; flex-direction: column; gap: 2px; text-align: left; cursor: pointer; }
 .tile:active { background: var(--soft); }
+.progress { background: var(--card); border: none; border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; text-align: left; cursor: pointer; width: 100%; font: inherit; color: var(--ink); font-size: 14px; }
+.progress:active { background: var(--soft); }
+.progress:focus-visible { outline: 3px solid rgba(11,107,88,.4); outline-offset: 2px; }
+.progress .between b { font-size: 16px; }
 .tile:focus-visible, .fchip:focus-visible, .btn:focus-visible { outline: 3px solid rgba(11,107,88,.4); outline-offset: 2px; }
 .tile b { font-size: 20px; font-weight: 700; }
 .tile span { font-size: 11px; color: var(--muted); }

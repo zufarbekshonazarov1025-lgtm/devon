@@ -72,6 +72,19 @@ export function NoProfile() {
 }
 
 // ---------- Bugun ----------
+/** Dasturdagi jami topshiriqlardan nechtasi bajarilgani (bekor qilinganlar hisobga olinmaydi). */
+function DoneProgress() {
+  const all = S.tasks.filter((t) => t.status !== 'bekor');
+  if (!all.length) return null;
+  const done = all.filter((t) => t.status === 'bajarildi').length, pc = Math.round((done / all.length) * 100);
+  return h('button', { class: 'progress', type: 'button', 'aria-label': `Bajarildi: ${all.length} tadan ${done} ta. Ro'yxatni ochish`,
+      onclick: () => { F.show = 'done'; F.who = 'all'; F.q = ''; go('#/ishlar'); } },
+    h('div', { class: 'between' },
+      h('span', {}, 'Bajarildi ', h('b', { class: 'c-brand' }, done), h('span', { class: 't-meta' }, ` / ${all.length} ta topshiriqdan`)),
+      h('b', { class: 'c-brand' }, pc + '%')),
+    h('div', { class: 'bar' }, h('div', { style: `width:${pc}%` })));
+}
+
 export function Home() {
   const me = S.me, ot = other(), d = longToday();
   const mine = S.tasks.filter((t) => isOpen(t) && t.assignee_id === me.id).sort(byDue);
@@ -120,6 +133,7 @@ export function Home() {
     HomeKudos(),
     h('div', { class: 'tiles' }, tiles.map(([n, l, c, show, who]) => h('button', { class: 'tile', type: 'button', 'aria-label': `${l}: ${n}. Ro'yxatni ochish`,
       onclick: () => { F.show = show; F.who = who; F.q = ''; go('#/ishlar'); } }, h('b', { class: c }, n), h('span', {}, l)))),
+    DoneProgress(),
     barokat && h('div', { class: 'banner gold' }, 'Barokatli kun bo\'ldi'),
     me.kind === 'rahbar' ? [waitingBlock, HomePlan(), theirsBlock, mineBlock] : [waitingBlock, HomePlan(), mineBlock, theirsBlock],
     h('a', { class: 'fab', href: '#/ishlar/yangi', 'aria-label': 'Yangi topshiriq' }, icon('plus', 24, '#fff', 2.5)));
