@@ -34,6 +34,7 @@ const P = {
   cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   check: '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
   chart: '<path d="M5 20V10M12 20V4M19 20v-7"/>',
+  stats: '<path d="M4 20h16M4 4v16"/><path d="M8 16l4-5 3 3 5-7"/>',
   more: '<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',

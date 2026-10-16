@@ -128,7 +128,7 @@ export function AchievementsCard() {
 
 // ---------- Mening sozlamalarim ----------
 // ---------- Pastki menyu: o'rtadagi bo'limlarni har kim o'zi tanlaydi (shu telefonda saqlanadi) ----------
-export const NAV_CHOICES = [['#/ishlar', 'Ishlar', 'list'], ['#/taqvim', 'Taqvim', 'cal'], ['#/tasdiq', 'Tasdiq', 'check'], ['#/hisobot', 'Hisobot', 'chart'],
+export const NAV_CHOICES = [['#/ishlar', 'Ishlar', 'list'], ['#/taqvim', 'Taqvim', 'cal'], ['#/tasdiq', 'Tasdiq', 'check'], ['#/hisobot', 'Hisobot', 'chart'], ['#/statistika', 'Statistika', 'stats'],
   ['#/eslatmalar', 'Eslatma', 'bell'], ['#/kutilmoqda', 'Kutilmoqda', 'clock']];
 const NAV_DEFAULT = ['#/ishlar', '#/taqvim', '#/tasdiq', '#/hisobot'], NAV_MAX = 4;
 function navPick() {

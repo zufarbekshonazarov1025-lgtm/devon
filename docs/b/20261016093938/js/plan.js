@@ -478,6 +478,7 @@ function StatsTab() {
       h('b', { style: 'padding-bottom:8px' }, 'Vakolat darajasi bo\'yicha'),
       k.levels.map((l) => row(`${l.n}-daraja`, `${l.total} ta`, `vaqtida ${l.good}`))) : null,
     AchievementsCard(),
+    h('a', { href: '#/statistika', class: 'btn ghost' }, 'Batafsil statistika', icon('next', 18)),
   ];
 }
 

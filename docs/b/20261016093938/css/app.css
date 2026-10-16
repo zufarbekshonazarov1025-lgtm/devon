@@ -273,3 +273,26 @@ html, body { overflow-x: hidden; overscroll-behavior-x: none; }
 /* Pastga tortib yopish belgisi */
 .sheet::before { content: ""; align-self: center; flex: none; width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: -10px 0 2px; }
 .sheet a.btn { text-decoration: none; }
+/* Statistika */
+.stat4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.stat4 span { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); }
+.stat4 b { font-size: 17px; color: var(--ink); }
+.vchart { display: flex; align-items: stretch; gap: 8px; height: 160px; }
+.vchart.small { gap: 4px; height: 130px; }
+.vcol { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; }
+.vcol small { font-size: 11px; font-weight: 700; color: var(--ink); min-height: 14px; }
+.vcol span { font-size: 11px; color: var(--muted); }
+.vcol.now span { color: var(--brand); font-weight: 700; }
+.vbar { width: 100%; max-width: 34px; border-radius: 6px 6px 2px 2px; overflow: hidden; display: flex; flex-direction: column; background: var(--soft); }
+.vbar i { display: block; background: var(--brand); flex: 1; }
+.vbar i.late { background: #E08A00; }
+.vbar.full i { background: var(--gold); }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--brand); }
+.legend i.late { background: #E08A00; }
+.hrow { display: grid; grid-template-columns: 110px 1fr 32px; align-items: center; gap: 10px; font-size: 14px; }
+.hrow b { text-align: right; }
+.hbar { height: 10px; border-radius: 5px; background: var(--soft); overflow: hidden; }
+.hbar i { display: block; height: 100%; border-radius: 5px; background: var(--brand); }
+.hbar i.blue { background: var(--blue); } .hbar i.amber { background: #B97A00; } .hbar i.gold { background: var(--gold); } .hbar i.done { background: var(--brand-dark); }

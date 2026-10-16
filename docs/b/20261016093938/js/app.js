@@ -3,6 +3,7 @@ import { ReportsView, ReportDetail, pendingForMe } from './plan.js';
 import { loadExtra, runRecurrences, calShift, calGoto, pendingReminders, pendingDueTasks, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
 import { loadMore, applyTheme, Notifications, MySettings, FromText, navItems } from './more.js';
 import { driveReturn } from './files.js';
+import { Stats } from './stats.js';
 import { registerDevice } from './native.js';
 import { Login, NoProfile, Home, Tasks, TaskForm, TaskDetail, Approvals, Soon, More, Trash, needsMe } from './views.js';
 
@@ -82,6 +83,7 @@ function route() {
   if (hash === '#/tasdiq') return [Approvals(), hash];
   if (hash === '#/hisobot') return [ReportsView(), hash];
   if ((m = hash.match(/^#\/hisobot\/([0-9a-f-]+)$/))) return [ReportDetail(m[1]), '#/hisobot'];
+  if (hash === '#/statistika') return [Stats(), '#/yana'];
   if (hash === '#/yana') return [More(), hash];
   if (hash === '#/savat') return [Trash(), '#/yana'];
   location.hash = '#/bugun';

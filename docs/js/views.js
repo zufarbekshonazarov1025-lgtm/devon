@@ -404,6 +404,7 @@ export function More() {
     Head(`${S.me.short_name}${S.me.is_admin ? ' · admin' : ''}`, 'Yana'),
     h('div', { class: 'section' }, h('h2', { style: 'font-size:13px;color:var(--muted)' }, 'Ishlar')),
     h('div', { class: 'list' },
+      row('Statistika', 'Natijalar, grafiklar, ikkalamiz yonma-yon', () => go('#/statistika')),
       row('Matndan qo\'shish', 'Bir nechta topshiriqni ro\'yxatdan kiritish', () => go('#/ishlar/matn')),
       row('Excelga chiqarish', 'Topshiriqlar, reja va hisobotlar bitta faylda', () => downloadExcel()),
       row('Tarix', 'Bajarilgan va bekor qilingan ishlar', () => { F.show = 'closed'; go('#/ishlar'); }),
