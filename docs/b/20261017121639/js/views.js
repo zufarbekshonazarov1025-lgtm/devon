@@ -1,5 +1,5 @@
 import { sb, S, bus, h, icon, toast, ask, confirmBox, today, fmtDate, fmtDateTime, dayOf, daysLeft, longToday, greeting,
-  celebrate, STATUS, isOpen, priority, dueChip, onTime, onTimeStats, nameOf, other, profile, loadTasks, updateTask, notify, go, Head, BackHead, Empty, owner } from './core.js';
+  celebrate, STATUS, isOpen, priority, dueChip, onTime, onTimeStats, nameOf, other, profile, loadTasks, updateTask, notify, go, Head, BackHead, Empty, owner, wide } from './core.js';
 import { Files } from './files.js';
 import { unregisterDevice } from './native.js';
 import { Bell, HomeKudos, StreakChip, KudosBlock, downloadExcel } from './more.js';
@@ -125,7 +125,7 @@ export function Home() {
     theirs.length ? theirs.slice(0, 4).map(TaskCard) : Empty('Ochiq ish yo\'q', `${nameOf(ot.id, true)}ga biriktirilgan ochiq ish yo'q.`),
   ] : [];
 
-  return h('main', { class: 'view' },
+  return h('main', { class: 'view home' },
     Head(`${d.week} · ${greeting()}, ${me.short_name}`, d.day,
       h('div', { style: 'display:flex;gap:8px' }, Bell(), h('button', { class: 'iconbtn', 'aria-label': 'Qidiruv', onclick: () => go('#/ishlar') }, icon('search', 20)))),
     motto && h('div', { class: 'motto' }, motto),
@@ -135,7 +135,10 @@ export function Home() {
       onclick: () => { F.show = show; F.who = who; F.q = ''; go('#/ishlar'); } }, h('b', { class: c }, n), h('span', {}, l)))),
     DoneProgress(),
     barokat && h('div', { class: 'banner gold' }, 'Barokatli kun bo\'ldi'),
-    me.kind === 'rahbar' ? [waitingBlock, HomePlan(), theirsBlock, mineBlock] : [waitingBlock, HomePlan(), mineBlock, theirsBlock],
+    // Telefonda bloklar ketma-ket turadi; kompyuterda ikki ustun: chapda javob kutayotganlar va reja, o'ngda ishlar
+    h('div', { class: 'hcols' },
+      h('div', { class: 'hcol' }, waitingBlock, HomePlan()),
+      h('div', { class: 'hcol' }, me.kind === 'rahbar' ? [theirsBlock, mineBlock] : [mineBlock, theirsBlock])),
     h('a', { class: 'fab', href: '#/ishlar/yangi', 'aria-label': 'Yangi topshiriq' }, icon('plus', 24, '#fff', 2.5)));
 }
 
@@ -211,7 +214,7 @@ export function Tasks() {
   const input = h('input', { type: 'search', placeholder: 'Qidirish', 'aria-label': 'Topshiriq qidirish', value: F.q,
     oninput: (e) => { F.q = e.target.value; clearTimeout(input._t); input._t = setTimeout(() => { bus.render(); const el = document.querySelector('.search input'); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 250); } });
 
-  return h('main', { class: 'view' },
+  return h('main', { class: 'view tasks' },
     Head(`${V.sub} · ${rows.length} ta`, V.title,
       h('a', { class: 'btn pill small', href: '#/ishlar/yangi' }, '+ Yangi')),
     h('label', { class: 'search' }, icon('search', 18, '#56645F'), input),
@@ -220,7 +223,26 @@ export function Tasks() {
       h('span', { 'aria-hidden': 'true', style: 'flex:none;width:1px;background:var(--line);margin:8px 2px' }),
       chip('show', 'open', 'Ochiq'), chip('show', 'all', 'Jami'), chip('show', 'done', 'Bajarildi'), chip('show', 'ontime', 'Vaqtida'),
       chip('show', 'late', 'Kechikib'), chip('show', 'muhim', 'Muhim!'), chip('show', 'review', 'Tekshiruvda'), chip('show', 'closed', 'Tarix')),
-    rows.length ? rows.map(TaskCard) : Empty(q ? 'Hech narsa topilmadi' : 'Ro\'yxat bo\'sh', q ? 'Boshqa so\'z bilan urinib ko\'ring.' : 'Bu bo\'limda topshiriq yo\'q.'));
+    rows.length ? (wide() ? TaskTable(rows) : rows.map(TaskCard)) : Empty(q ? 'Hech narsa topilmadi' : 'Ro\'yxat bo\'sh', q ? 'Boshqa so\'z bilan urinib ko\'ring.' : 'Bu bo\'limda topshiriq yo\'q.'));
+}
+
+/** Kompyuterdagi topshiriqlar jadvali. Qatorni bosish topshiriqni ochadi. */
+function TaskTable(rows) {
+  const waitName = (t) => isOpen(t) && t.waiting_on && (S.contacts.find((c) => c.id === t.waiting_on) || {}).name;
+  return h('div', { class: 'tablewrap' }, h('table', { class: 'ttable' },
+    h('thead', {}, h('tr', {}, ['№', 'Topshiriq', 'Kimdan → kimga', 'Holat', 'Muhimlik', 'Muddat'].map((x) => h('th', { scope: 'col' }, x)))),
+    h('tbody', {}, rows.map((t) => {
+      const pr = priority(t), du = dueChip(t), w = waitName(t), ot = !isOpen(t) && t.status === 'bajarildi' ? onTime(t) : null;
+      return h('tr', { onclick: (e) => { if (!e.target.closest('a')) go(`#/ish/${t.id}`); } },
+        h('td', { class: 'num' }, t.seq),
+        h('td', { class: 'ttl' }, h('a', { href: `#/ish/${t.id}` }, t.title),
+          w ? h('div', { class: 't-meta c-amber', style: 'font-weight:700' }, `Kutilmoqda: ${w}`) : null,
+          t.is_private ? h('div', { class: 't-meta' }, 'shaxsiy') : null),
+        h('td', { class: 't-meta' }, `${nameOf(t.creator_id, true)} → ${nameOf(t.assignee_id, true)}`),
+        h('td', {}, h('span', { class: `chip ${t.status === 'bajarildi' ? 'green' : 'grey'}` }, STATUS[t.status])),
+        h('td', {}, pr ? h('span', { class: `chip ${pr.cls}` }, pr.label) : ot !== null ? h('span', { class: `chip ${ot ? 'green' : 'amber'}` }, ot ? 'Vaqtida' : 'Kechikib') : '—'),
+        h('td', { class: 'due' }, h('div', {}, fmtDate(t.due_date)), du ? h('span', { class: `chip ${du.cls}` }, du.label) : null));
+    }))));
 }
 
 // ---------- Topshiriq shakli ----------

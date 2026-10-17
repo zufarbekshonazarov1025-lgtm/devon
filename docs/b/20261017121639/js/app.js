@@ -1,7 +1,7 @@
-import { sb, S, bus, h, icon, loadBase, loadTasks, loadAll, toast, countUp } from './core.js';
+import { sb, S, bus, h, icon, loadBase, loadTasks, loadAll, toast, countUp, wide, WIDE_MQ } from './core.js';
 import { ReportsView, ReportDetail, pendingForMe } from './plan.js';
 import { loadExtra, runRecurrences, calShift, calGoto, pendingReminders, pendingDueTasks, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
-import { loadMore, applyTheme, Notifications, MySettings, FromText, navItems } from './more.js';
+import { loadMore, applyTheme, Notifications, MySettings, FromText, navItems, NAV_CHOICES } from './more.js';
 import { driveReturn } from './files.js';
 import { Stats } from './stats.js';
 import { registerDevice } from './native.js';
@@ -58,9 +58,16 @@ driveReturn();
 
 function Nav(active) {
   const n = needsMe().length + pendingForMe().length;
-  return h('nav', { class: 'nav', 'aria-label': 'Asosiy menyu' }, h('div', { class: 'in' },
-    navItems().map(([href, label, ic]) => h('a', { href, class: href === active ? 'on' : '', 'aria-current': href === active ? 'page' : null },
-      icon(ic), label, href === '#/tasdiq' && n > 0 ? h('span', { class: 'badge' }, n) : null))));
+  const link = ([href, label, ic]) => h('a', { href, class: href === active ? 'on' : '', 'aria-current': href === active ? 'page' : null },
+    icon(ic), href === '#/eslatmalar' && wide() ? 'Eslatmalar' : label, href === '#/tasdiq' && n > 0 ? h('span', { class: 'badge' }, n) : null);
+  if (!wide()) return h('nav', { class: 'nav', 'aria-label': 'Asosiy menyu' }, h('div', { class: 'in' }, navItems().map(link)));
+  // Kompyuterda: chap tomonda hamma bo'limlar doim ko'rinib turadi
+  const all = [['#/bugun', 'Bugun', 'home'], ...NAV_CHOICES, ['#/yana', 'Yana', 'more']];
+  return h('nav', { class: 'nav side', 'aria-label': 'Asosiy menyu' }, h('div', { class: 'in' },
+    h('a', { class: 'brandmark', href: '#/bugun', 'aria-label': 'Devon — bosh sahifa', html:
+      '<svg width="34" height="34" viewBox="0 0 120 120" aria-hidden="true"><rect width="120" height="120" rx="28" fill="#0B6B58"/><rect x="28" y="30" width="28" height="60" rx="5" fill="#fff"/><rect x="64" y="30" width="28" height="60" rx="5" fill="#fff"/><rect x="56" y="26" width="8" height="68" rx="4" fill="#E3B341"/></svg><b>Devon</b>' }),
+    h('a', { class: 'btn newtask', href: '#/ishlar/yangi' }, icon('plus', 18, '#fff', 2.5), 'Yangi topshiriq'),
+    all.map(link)));
 }
 
 function route() {
@@ -136,6 +143,9 @@ bus.render = render;
 let remCount = -1;
 setInterval(() => { if (!S.me || !ready) return; const n = pendingReminders().length * 1000 + pendingDueTasks().length; if (n !== remCount) { const first = remCount < 0; remCount = n; if (!first && !busy()) render(); } }, 60000);
 window.addEventListener('hashchange', render);
+// Oyna kengligi telefon/kompyuter chegarasidan o'tsa, ko'rinishni almashtiramiz
+WIDE_MQ.addEventListener('change', () => { document.documentElement.classList.toggle('wide', wide()); if (!busy()) render(); });
+document.documentElement.classList.toggle('wide', wide());
 
 /** Foydalanuvchi yozayotgan yoki oyna ochiq bo'lsa, ekranni o'zidan-o'zi yangilamaymiz. */
 function busy() {

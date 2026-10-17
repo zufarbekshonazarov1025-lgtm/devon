@@ -153,7 +153,7 @@ function NavSettings() {
         } });
         return h('label', { class: 'check' }, box, icon(ic, 20), href === '#/eslatmalar' ? 'Eslatmalar' : label);
       }),
-      h('div', { class: 't-meta' }, 'Tanlov faqat shu telefonda saqlanadi.'))];
+      h('div', { class: 't-meta' }, 'Tanlov faqat shu telefonda saqlanadi. Kompyuterda hamma bo\'limlar chap menyuda doim ko\'rinadi.'))];
 }
 
 export function MySettings() {

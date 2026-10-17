@@ -179,6 +179,9 @@ export async function notify(userId, kind, title, body, refId) {
 
 // ---------- Umumiy ekran bo'laklari ----------
 export const go = (hash) => { location.hash = hash; };
+/** Kompyuter (keng ekran) ko'rinishi: chap menyu, ikki ustun, jadval. */
+export const WIDE_MQ = matchMedia('(min-width: 1024px)');
+export const wide = () => WIDE_MQ.matches;
 export function Head(sub, title, right) {
   return h('header', { class: 'head' }, h('div', {}, h('div', { class: 'sub' }, sub), h('h1', {}, title)), right);
 }
