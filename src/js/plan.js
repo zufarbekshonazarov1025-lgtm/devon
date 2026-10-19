@@ -335,12 +335,35 @@ export function indicators(start, end) {
     overdue: S.tasks.filter((t) => t.assignee_id === o && isOpen(t) && t.due_date < today()).length };
 }
 const pc = (v) => (v == null ? '—' : v + '%');
+/** Davr rejasi: shu davr oxirigacha muddati keladigan (va o'tgan) ochiq topshiriqlar, har bir odam bo'yicha. */
+function planTaskLines(start, end, who) {
+  return S.tasks.filter((t) => t.assignee_id === who && isOpen(t) && !t.deleted_at && t.due_date <= end)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date) || a.seq - b.seq)
+    .map((t) => `${t.title} (№${t.seq}, muddat ${fmtDate(t.due_date)}${t.due_date < start ? ' — o\'tgan' : ''})`);
+}
+function genPlan(kind, start, end) {
+  const head = kind === 'haftalik' ? `Haftalik ish reja: ${fmtDate(start)} – ${fmtDate(end)}` : `Oylik ish reja: ${monthName(start)}`;
+  const people = [owner(), ...S.profiles.filter((p) => p.id !== owner().id)];
+  return `${head}\n\n` + people.map((p) => `${nameOf(p.id, true)}:\n${numbered(planTaskLines(start, end, p.id))}`).join('\n\n');
+}
+function nextRange(kind, end) {
+  const s = addDays(end, 1);
+  return kind === 'haftalik' ? [s, addDays(s, 6)] : [s, monthEnd(s)];
+}
+function nextPlanText(kind, end) {
+  const [s, e] = nextRange(kind, end);
+  const doc = findDoc('reja', kind, s);
+  if (doc && doc.body) return doc.body;
+  const people = [owner(), ...S.profiles.filter((p) => p.id !== owner().id)];
+  return people.map((p) => `${nameOf(p.id, true)}:\n${numbered(S.tasks.filter((t) => t.assignee_id === p.id && isOpen(t) && !t.deleted_at && t.due_date >= s && t.due_date <= e)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date)).map((t) => `${t.title} (№${t.seq}, muddat ${fmtDate(t.due_date)})`))}`).join('\n\n');
+}
 function genPeriod(kind, start, end) {
   const k = indicators(start, end), o = owner().id;
   const closed = S.tasks.filter((t) => t.assignee_id === o && t.status === 'bajarildi' && inRange(dayOf(t.submitted_at || t.closed_at), start, end)).map((t) => `${t.title}${onTime(t) ? '' : ' (kechikib)'}`);
   const open = S.tasks.filter((t) => t.assignee_id === o && isOpen(t)).map((t) => `${t.title} (muddat ${fmtDate(t.due_date)})`);
   const head = kind === 'haftalik' ? `Hafta: ${fmtDate(start)} – ${fmtDate(end)}` : `Oy: ${monthName(start)}`;
-  return `${head}\n\nKo'rsatkichlar:\n- Bajarilgan topshiriqlar: ${k.done} (vaqtida ${k.good}, kechikib ${k.late})\n- Vaqtida bajarish: ${pc(k.pct)}\n- Reja bandlari: ${k.planTotal} tadan ${k.planDone} tasi bajarildi\n- Hisobot intizomi: ${pc(k.discipline)}\n- Muddati ko'chirilgan: ${k.moved}\n- Qaytarilgan: ${k.returned}\n- Ochiq qolgan: ${k.open} (shundan kechikkan ${k.overdue})\n\nBajarilgan ishlar:\n${numbered(closed)}\n\nKeyingi davrga o'tadigan ishlar:\n${numbered(open)}\n\n${kind === 'haftalik' ? 'Keyingi hafta rejasi' : 'Keyingi oy rejasi'}:\n1. `;
+  return `${head}\n\nKo'rsatkichlar:\n- Bajarilgan topshiriqlar: ${k.done} (vaqtida ${k.good}, kechikib ${k.late})\n- Vaqtida bajarish: ${pc(k.pct)}\n- Reja bandlari: ${k.planTotal} tadan ${k.planDone} tasi bajarildi\n- Hisobot intizomi: ${pc(k.discipline)}\n- Muddati ko'chirilgan: ${k.moved}\n- Qaytarilgan: ${k.returned}\n- Ochiq qolgan: ${k.open} (shundan kechikkan ${k.overdue})\n\nBajarilgan ishlar:\n${numbered(closed)}\n\nKeyingi davrga o'tadigan ishlar:\n${numbered(open)}\n\n${kind === 'haftalik' ? 'Keyingi hafta rejasi' : 'Keyingi oy rejasi'}:\n${nextPlanText(kind, end)}`;
 }
 
 // ---------- Hisobot bo'limi ----------
@@ -358,8 +381,10 @@ function clip(text, key) {
     h('button', { class: 'more', type: 'button', 'aria-expanded': String(open), onclick: flip }, open ? 'Yig\'ish' : 'To\'liq ko\'rsatish'));
 }
 
-function ReportCard({ period, start, end, title, generate }) {
-  const rep = findDoc('hisobot', period, start);
+const EDIT = new Set();
+function ReportCard({ period, start, end, title, generate, docType = 'hisobot' }) {
+  const rep = findDoc(docType, period, start);
+  const isPlan = docType === 'reja';
   const mine = iAmOwner();
   const head = h('div', { class: 'between' }, h('b', {}, title), docChip(rep));
   const sent = rep && ['yuborildi', 'tasdiqlandi'].includes(rep.status);
@@ -374,7 +399,15 @@ function ReportCard({ period, start, end, title, generate }) {
         h('button', { class: 'btn ghost', onclick: async () => { const v = await ask({ title: 'Izoh yozing', label: 'Nimani o\'zgartirish kerak', ok: 'Yuborish' }); if (v != null) respond(req, false, v); } }, 'Izoh yozish')),
       rep && rep.status !== 'qoralama' && h('a', { href: `#/hisobot/${rep.id}`, class: 't-meta', style: 'font-weight:700;color:var(--brand);min-height:44px;display:flex;align-items:center;gap:2px' }, 'Alohida sahifada ochish', icon('next', 16)));
   }
-  if (sent) {
+  const key = `${docType}:${period}:${start}`;
+  if (sent && isPlan && !EDIT.has(key)) {
+    return h('section', { class: 'card' }, head,
+      clip(rep.body, rep.id),
+      h('div', { class: 't-meta' }, `Yuborilgan: ${fmtDateTime(rep.sent_at)}${rep.on_time === false ? ' · kechikib' : ''}`),
+      rep.approver_comment && h('div', {}, h('div', { class: 't-meta' }, 'Izoh'), h('div', { class: 'text' }, rep.approver_comment)),
+      h('button', { class: 'btn ghost', onclick: () => { EDIT.add(key); bus.render(); } }, 'Rejani tahrirlash'));
+  }
+  if (sent && !isPlan) {
     const editReq = S.requests.find((r) => r.kind === 'hisobot_tuzatish' && r.report_id === rep.id && r.status === 'kutilmoqda');
     return h('section', { class: 'card' }, head,
       clip(rep.body, rep.id),
@@ -386,11 +419,11 @@ function ReportCard({ period, start, end, title, generate }) {
   const ta = h('textarea', { class: 'input', 'aria-label': title + ' matni', style: 'min-height:260px', value: rep && rep.body ? rep.body : generate() });
   return h('section', { class: 'card' }, head,
     rep && rep.status === 'qaytarildi' && rep.approver_comment && h('div', { class: 'banner', style: 'background:var(--red-tint);color:var(--red)' }, 'Qaytarildi: ' + rep.approver_comment),
-    h('div', { class: 't-meta' }, 'Matnni dastur tuzdi. Tekshiring, kerak bo\'lsa tuzating va yuboring.'),
+    h('div', { class: 't-meta' }, rep && rep.body ? 'Tekshiring, kerak bo\'lsa tuzating va yuboring.' : 'Matnni dastur tuzdi. Tekshiring, kerak bo\'lsa tuzating va yuboring.'),
     ta,
     h('div', { class: 'row' },
       h('button', { class: 'btn ghost', type: 'button', onclick: async () => { if (ta.value.trim() === generate().trim() || await confirmBox({ title: 'Qayta tuzilsinmi?', text: 'Qo\'lda yozgan o\'zgarishlaringiz o\'chadi.', ok: 'Qayta tuzish' })) ta.value = generate(); } }, 'Qayta tuzish'),
-      h('button', { class: 'btn', type: 'button', onclick: () => { const body = ta.value.trim(); if (!body) { toast('Matn bo\'sh'); return; } sendDoc({ docType: 'hisobot', period, start, end, body }); } }, 'Yuborish')));
+      h('button', { class: 'btn', type: 'button', onclick: async () => { const body = ta.value.trim(); if (!body) { toast('Matn bo\'sh'); return; } if (await sendDoc({ docType, period, start, end, body })) { EDIT.delete(key); bus.render(); } } }, isPlan ? 'Tasdiqqa yuborish' : 'Yuborish')));
 }
 
 async function askReportEdit(rep) {
@@ -444,11 +477,16 @@ function PeriodTab(kind) {
   const start = kind === 'haftalik' ? mondayOf(t) : monthStart(t);
   const end = kind === 'haftalik' ? addDays(start, 6) : monthEnd(t);
   const title = kind === 'haftalik' ? `Haftalik hisobot · ${fmtDate(start)} – ${fmtDate(end)}` : `Oylik hisobot · ${monthName(start)}`;
-  const archive = S.reports.filter((r) => r.owner_id === owner().id && r.doc_type === 'hisobot' && r.period === kind && r.status !== 'qoralama' && r.period_start !== start).slice(0, 12);
+  const [ns, ne] = nextRange(kind, end);
+  const planTitle = (a, b, next) => (kind === 'haftalik' ? `${next ? 'Kelasi hafta rejasi' : 'Haftalik reja'} · ${fmtDate(a)} – ${fmtDate(b)}` : `${next ? 'Kelasi oy rejasi' : 'Oylik reja'} · ${monthName(a)}`);
+  const archive = S.reports.filter((r) => r.owner_id === owner().id && r.period === kind && r.status !== 'qoralama' && r.period_start < start)
+    .sort((x, y) => y.period_start.localeCompare(x.period_start) || x.doc_type.localeCompare(y.doc_type)).slice(0, 12);
   return [
+    ReportCard({ docType: 'reja', period: kind, start, end, title: planTitle(start, end), generate: () => genPlan(kind, start, end) }),
     ReportCard({ period: kind, start, end, title, generate: () => genPeriod(kind, start, end) }),
-    archive.length ? [h('div', { class: 'section' }, h('h2', {}, 'Oldingi hisobotlar')),
-      h('div', { class: 'list' }, archive.map((r) => h('a', { href: `#/hisobot/${r.id}` }, h('span', {}, h('b', {}, docPeriod(r)), h('small', {}, r.status === 'tasdiqlandi' ? 'Tasdiqlandi' : 'Tasdiq kutilmoqda')), icon('next', 18, '#56645F'))))] : null,
+    ReportCard({ docType: 'reja', period: kind, start: ns, end: ne, title: planTitle(ns, ne, true), generate: () => genPlan(kind, ns, ne) }),
+    archive.length ? [h('div', { class: 'section' }, h('h2', {}, 'Oldingi reja va hisobotlar')),
+      h('div', { class: 'list' }, archive.map((r) => h('a', { href: `#/hisobot/${r.id}` }, h('span', {}, h('b', {}, `${r.doc_type === 'reja' ? 'Reja' : 'Hisobot'} · ${docPeriod(r)}`), h('small', {}, r.status === 'tasdiqlandi' ? 'Tasdiqlandi' : r.status === 'qaytarildi' ? 'Qaytarildi' : 'Tasdiq kutilmoqda')), icon('next', 18, '#56645F'))))] : null,
   ];
 }
 
