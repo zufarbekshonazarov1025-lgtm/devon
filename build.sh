@@ -5,7 +5,9 @@
 set -e
 cd "$(dirname "$0")"
 V=$(date -u +%Y%m%d%H%M%S)
-rm -rf docs/b
+# Oldingi versiya papkasini saqlab qolamiz: brauzer yoki tarmoq keshi eski version.json bersa ham dastur ochilaversin.
+PREV=$(sed -n 's/.*"v":"\([0-9]*\)".*/\1/p' docs/version.json 2>/dev/null)
+for d in docs/b/*; do [ -d "$d" ] && [ "$(basename "$d")" != "$PREV" ] && rm -rf "$d"; done
 mkdir -p "docs/b/$V"
 cp -r src/js src/css "docs/b/$V/"
 # Eski sahifa nusxasi brauzerda qolgan bo'lsa ham ishlashi uchun (vaqtincha)
