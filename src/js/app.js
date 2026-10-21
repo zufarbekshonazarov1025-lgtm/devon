@@ -2,7 +2,7 @@ import { sb, S, bus, h, icon, loadBase, loadTasks, loadAll, toast, countUp, wide
 import { ReportsView, ReportDetail, pendingForMe } from './plan.js';
 import { loadExtra, runRecurrences, calShift, calGoto, pendingReminders, pendingDueTasks, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
 import { loadMore, applyTheme, Notifications, MySettings, FromText, navItems, navChoices } from './more.js';
-import { Money, MoneySettings } from './money.js';
+import { Money, MoneySettings, Debts, DebtDetail } from './money.js';
 import { driveReturn } from './files.js';
 import { Stats } from './stats.js';
 import { registerDevice } from './native.js';
@@ -94,6 +94,8 @@ function route() {
   if (hash === '#/statistika') return [Stats(), '#/yana'];
   if (hash === '#/pullar') return [Money(), hash];
   if (hash === '#/pullar/sozlama') return [MoneySettings(), '#/pullar'];
+  if (hash === '#/pullar/qarzlar') return [Debts(), '#/pullar'];
+  if ((m = hash.match(/^#\/pullar\/qarz\/([0-9a-f-]+)$/))) return [DebtDetail(m[1]), '#/pullar'];
   if (hash === '#/yana') return [More(), hash];
   if (hash === '#/savat') return [Trash(), '#/yana'];
   location.hash = '#/bugun';

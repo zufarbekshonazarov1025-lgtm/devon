@@ -424,3 +424,17 @@ html, body { overflow-x: hidden; overscroll-behavior-x: none; }
 .wide .view.money { padding-bottom: 110px; }
 .starthint { background: var(--amber-tint); color: var(--amber); }
 .starthint b { color: var(--ink); }
+/* Qarzlar */
+a.debtcard { color: var(--ink); text-decoration: none; gap: 8px; }
+.debt2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.debt2 > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.debt2 small { font-size: 12px; color: var(--muted); }
+.debt2 b { font-size: 16px; overflow-wrap: anywhere; }
+a.debtitem { color: var(--ink); text-decoration: none; gap: 8px; }
+a.debtitem.closed { opacity: .65; }
+.debtitem .dperson { font-size: 16px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.txico.qarz { background: var(--amber-tint); }
+.linkbtn { border: none; background: none; color: var(--brand); font-weight: 700; font-size: 13px; min-height: 32px; padding: 0; cursor: pointer; }
+.fab2.wide2 { min-height: 52px; padding: 0 22px; font-size: 15px; background: var(--brand); color: #fff; border-color: var(--brand); }
+:root[data-theme="tun"] a.debtcard, :root[data-theme="tun"] a.debtitem { color: var(--ink); }
+:root[data-theme="tun"] .fab2.wide2 { color: #fff; }

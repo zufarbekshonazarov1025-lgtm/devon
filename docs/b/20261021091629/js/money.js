@@ -6,7 +6,7 @@ import { buildXlsx } from './more.js';
 /** Bo'lim kimga ochiq: hozircha faqat yordamchiga. */
 export const moneyAllowed = () => S.me?.kind === 'yordamchi';
 
-const M = { loaded: false, failed: false, loading: null, accounts: [], cats: [], tx: [], set: null, month: monthStart(today()), acc: null, unlocked: false, catKind: 'chiqim' };
+const M = { loaded: false, failed: false, loading: null, accounts: [], cats: [], tx: [], debts: [], devs: [], set: null, debtDir: 'men', month: monthStart(today()), acc: null, unlocked: false, catKind: 'chiqim' };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') M.unlocked = false; });
 
 const DEF_ACC = [['Naqd pul', 'naqd'], ['Karta', 'karta']];
@@ -23,15 +23,18 @@ export async function loadMoney(force = false) {
   if (M.loaded && !force) return;
   if (M.loading) return M.loading;
   M.loading = (async () => {
-    const [a, c, t, s] = await Promise.all([
+    const [a, c, t, s, d, e] = await Promise.all([
       sb.from('fin_accounts').select('*').order('sort').order('created_at'),
       sb.from('fin_categories').select('*').order('sort').order('created_at'),
       sb.from('fin_tx').select('*').order('tx_date', { ascending: false }).order('created_at', { ascending: false }).limit(20000),
       sb.from('fin_settings').select('*').maybeSingle(),
+      sb.from('fin_debts').select('*').order('created_at'),
+      sb.from('fin_debt_events').select('*').order('event_date').order('created_at'),
     ]);
     if (a.error || c.error || t.error) { M.failed = true; return; }
     M.failed = false;
     M.accounts = a.data || []; M.cats = c.data || []; M.tx = t.data || []; M.set = s.data || null;
+    M.debts = d.error ? [] : d.data || []; M.devs = e.error ? [] : e.data || [];
     if (!M.accounts.length && !M.cats.length && !M.tx.length) await seed();
     M.loaded = true;
   })();
@@ -58,8 +61,26 @@ export function balance(acc) {
     if (t.account_id === acc.id) b += t.kind === 'kirim' ? num(t.amount) : -num(t.amount);
     if (t.to_account_id === acc.id) b += num(t.to_amount ?? t.amount);
   }
+  for (const e of M.devs) if (e.account_id === acc.id) b += evSign(e) * num(e.amount);
   return Math.round(b * 100) / 100;
 }
+// ---------- Qarz hisob-kitobi ----------
+const debtOf = (id) => M.debts.find((d) => d.id === id);
+/** Qarz harakati hisobdagi pulni oshiradimi (+1) yoki kamaytiradimi (−1). */
+const evSign = (e) => ((debtOf(e.debt_id)?.direction === 'men') === (e.type === 'oshdi') ? 1 : -1);
+const evsOf = (d) => M.devs.filter((e) => e.debt_id === d.id);
+function debtNums(d) {
+  let total = 0, paid = 0;
+  for (const e of evsOf(d)) if (e.type === 'oshdi') total += num(e.amount); else paid += num(e.amount);
+  return { total, paid, left: Math.round((total - paid) * 100) / 100 };
+}
+const isOverdue = (d) => !!d.due_date && d.due_date < today() && debtNums(d).left > 0;
+function debtSums(dir) {
+  const r = { UZS: 0, USD: 0, n: 0, late: 0 };
+  for (const d of M.debts) { if (d.direction !== dir) continue; const l = debtNums(d).left; if (l <= 0) continue; r[d.currency] += l; r.n++; if (isOverdue(d)) r.late++; }
+  return r;
+}
+
 /** Davr bo'yicha kirim va chiqim (o'tkazmalar hisobga olinmaydi), valyuta bo'yicha alohida. */
 function totals(a, b, accId = null) {
   const r = { UZS: { kirim: 0, chiqim: 0 }, USD: { kirim: 0, chiqim: 0 } };
@@ -339,8 +360,10 @@ export function Money() {
   const sumCur = (cur) => live.filter((x) => x.currency === cur).reduce((s, x) => s + balance(x), 0);
   const hasUsd = live.some((x) => x.currency === 'USD');
   const txs = M.tx.filter((t) => t.tx_date >= a && t.tx_date <= b && (!M.acc || t.account_id === M.acc || t.to_account_id === M.acc));
+  const evs = M.devs.filter((e) => e.event_date >= a && e.event_date <= b && (!M.acc || e.account_id === M.acc));
   const days = {};
   for (const t of txs) (days[t.tx_date] = days[t.tx_date] || []).push(t);
+  for (const e of evs) (days[e.event_date] = days[e.event_date] || []).push({ ...e, _ev: true });
   const dayTotal = (list) => list.filter((t) => t.kind === 'chiqim' && curOf(t.account_id) === 'UZS').reduce((s, t) => s + num(t.amount), 0);
   const eye = h('button', { class: 'iconbtn', type: 'button', 'aria-label': hidden() ? 'Summalarni ko\'rsatish' : 'Summalarni yashirish', 'aria-pressed': String(hidden()), onclick: async () => { if (await saveSettings({ hide_amounts: !hidden() })) bus.render(); } }, svg(hidden() ? EYE_OFF : EYE));
 
@@ -359,6 +382,7 @@ export function Money() {
     !M.tx.length && live.every((x) => !num(x.opening_balance)) && h('a', { class: 'card starthint', href: '#/pullar/sozlama' },
       h('b', {}, 'Boshlash uchun bitta qadam'),
       h('span', { style: 'font-size:14px' }, 'Naqd pulingiz va kartangizda hozir qancha borligini kiriting — shunda qoldiq to\'g\'ri chiqadi. Bu yerni bosing.')),
+    DebtCard(),
     MonthBar(),
     h('div', { class: 'tiles t3' },
       h('div', { class: 'tile', style: 'cursor:default' }, h('b', { class: 'c-brand' }, short(u.kirim)), h('span', {}, 'Kirim')),
@@ -367,18 +391,220 @@ export function Money() {
     (usd.kirim || usd.chiqim) ? h('div', { class: 't-meta', style: 'padding:0 4px' }, `Dollarda: kirim ${money(usd.kirim, 'USD')}, chiqim ${money(usd.chiqim, 'USD')}`) : null,
     WhereWent(a, b),
     SixMonths(),
-    h('div', { class: 'section' }, h('h2', {}, 'Yozuvlar'), txs.length ? h('span', { class: 't-meta' }, `${txs.length} ta`) : null),
-    txs.length ? Object.keys(days).sort().reverse().map((d) => [
+    h('div', { class: 'section' }, h('h2', {}, 'Yozuvlar'), txs.length + evs.length ? h('span', { class: 't-meta' }, `${txs.length + evs.length} ta`) : null),
+    txs.length + evs.length ? Object.keys(days).sort().reverse().map((d) => [
       h('div', { class: 'between dayhead' }, h('span', {}, d === today() ? 'Bugun' : d === addDays(today(), -1) ? 'Kecha' : fmtDate(d)), dayTotal(days[d]) ? h('span', {}, money(dayTotal(days[d]), 'UZS', '−')) : null),
-      h('div', { class: 'list' }, days[d].map(TxRow))]) : Empty('Yozuv yo\'q', 'Bu oyda hali hech narsa yozilmagan.'),
+      h('div', { class: 'list' }, days[d].map((x) => (x._ev ? EvRow(x) : TxRow(x))))]) : Empty('Yozuv yo\'q', 'Bu oyda hali hech narsa yozilmagan.'),
     h('div', { class: 'fabs' },
       h('button', { class: 'fab2 in', type: 'button', 'aria-label': 'Kirim qo\'shish', onclick: () => txSheet(null, 'kirim') }, '+ Kirim'),
       h('button', { class: 'fab', type: 'button', 'aria-label': 'Chiqim qo\'shish', onclick: () => txSheet(null, 'chiqim') }, icon('plus', 26, '#fff', 2.5))));
 }
 
+// ---------- Qarzlar ----------
+const DIR = { men: 'Men qarzdorman', menga: 'Menga qarzdor' };
+const dueChip = (d) => {
+  if (!d.due_date || debtNums(d).left <= 0) return null;
+  const n = Math.round((Date.parse(d.due_date + 'T00:00:00Z') - Date.parse(today() + 'T00:00:00Z')) / 86400000);
+  if (n < 0) return h('span', { class: 'chip red' }, `Muddati o'tdi · ${-n} kun`);
+  if (n === 0) return h('span', { class: 'chip amber' }, 'Bugun qaytarish kerak');
+  if (n <= 7) return h('span', { class: 'chip amber' }, `${n} kun qoldi`);
+  return h('span', { class: 'chip grey' }, `Muddat: ${fmtDate(d.due_date)}`);
+};
+function DebtCard() {
+  const men = debtSums('men'), menga = debtSums('menga');
+  const line = (r) => [r.UZS || !r.USD ? money(r.UZS) : null, r.USD ? money(r.USD, 'USD') : null].filter(Boolean).join(' + ');
+  if (!men.n && !menga.n) return h('a', { class: 'card debtcard', href: '#/pullar/qarzlar' },
+    h('div', { class: 'between' }, h('b', {}, 'Qarzlar'), icon('next', 18)),
+    h('span', { class: 't-meta' }, 'Qarz yo\'q. Kimgadir qarz bo\'lsangiz yoki kimdir sizga qarz bo\'lsa, shu yerda yozib boring.'));
+  return h('a', { class: 'card debtcard', href: '#/pullar/qarzlar' },
+    h('div', { class: 'between' }, h('b', {}, 'Qarzlar'), h('span', { style: 'display:flex;align-items:center;gap:6px' }, (men.late + menga.late) ? h('span', { class: 'chip red' }, `${men.late + menga.late} tasi muddatidan o'tgan`) : null, icon('next', 18))),
+    h('div', { class: 'debt2' },
+      h('div', {}, h('small', {}, `Men qarzdorman · ${men.n} ta`), h('b', { class: men.n ? 'c-red' : '' }, men.n ? line(men) : '0')),
+      h('div', {}, h('small', {}, `Menga qarzdor · ${menga.n} ta`), h('b', { class: menga.n ? 'c-brand' : '' }, menga.n ? line(menga) : '0'))));
+}
+function EvRow(e) {
+  const d = debtOf(e.debt_id); if (!d) return null;
+  const sg = evSign(e), cur = d.currency;
+  const what = d.direction === 'men' ? (e.type === 'oshdi' ? 'Qarz oldim' : 'Qarzni qaytardim') : (e.type === 'oshdi' ? 'Qarz berdim' : 'Qarz qaytdi');
+  const sub = [d.person, e.note, e.account_id ? accOf(e.account_id)?.name : 'hisobga tegmagan'].filter(Boolean).join(' · ');
+  return h('button', { type: 'button', class: 'txrow', onclick: () => go('#/pullar/qarz/' + d.id) },
+    h('i', { class: 'txico qarz', 'aria-hidden': 'true' }, '🤝'),
+    h('span', { class: 'txmid' }, h('b', {}, what), h('small', {}, sub)),
+    h('b', { class: 'txamt ' + (e.account_id ? (sg > 0 ? 'kirim' : '') : 'otkazma') }, money(num(e.amount), cur, e.account_id ? (sg > 0 ? '+' : '−') : '')));
+}
+function DebtItem(d) {
+  const n = debtNums(d), pct = n.total ? Math.min(100, Math.round((n.paid / n.total) * 100)) : 0;
+  return h('a', { class: 'card debtitem' + (n.left <= 0 ? ' closed' : ''), href: '#/pullar/qarz/' + d.id },
+    h('div', { class: 'between' }, h('b', { class: 'dperson' }, d.person), h('b', { class: n.left <= 0 ? 'c-muted' : d.direction === 'men' ? 'c-red' : 'c-brand', style: 'white-space:nowrap' }, n.left <= 0 ? 'Yopildi' : money(n.left, d.currency))),
+    n.total ? h('div', { class: 'hbar' }, h('i', { style: `width:${pct}%` })) : null,
+    h('div', { class: 'between t-meta' }, h('span', {}, n.left <= 0 ? `Jami: ${short(n.total, d.currency)}` : n.paid ? `Qaytarildi ${pct}% · jami ${short(n.total, d.currency)}` : `Jami: ${short(n.total, d.currency)}`), dueChip(d)));
+}
+export function Debts() {
+  if (!moneyAllowed()) { go('#/bugun'); return h('main', { class: 'view' }); }
+  if (!M.loaded) return Loading(BackHead('Qarzlar', '#/pullar'));
+  if (M.set?.pin_hash && !M.unlocked) return Lock();
+  const dir = M.debtDir, s = debtSums(dir);
+  const mine = M.debts.filter((d) => d.direction === dir);
+  const open = mine.filter((d) => debtNums(d).left > 0).sort((x, y) => (x.due_date || '9999').localeCompare(y.due_date || '9999') || debtNums(y).left - debtNums(x).left);
+  const closed = mine.filter((d) => debtNums(d).left <= 0);
+  return h('main', { class: 'view money' },
+    BackHead('Qarzlar', '#/pullar'),
+    h('div', { class: 'seg' }, Object.entries(DIR).map(([k, l]) => h('button', { type: 'button', class: (dir === k ? 'on ' : '') + (k === 'men' ? 'k-chiqim' : 'k-kirim'), 'aria-pressed': String(dir === k), onclick: () => { M.debtDir = k; bus.render(); } }, l))),
+    h('section', { class: 'card', style: 'gap:2px' },
+      h('small', { class: 't-meta' }, dir === 'men' ? 'Jami qaytarishim kerak' : 'Jami menga qaytishi kerak'),
+      h('b', { class: dir === 'men' ? 'c-red' : 'c-brand', style: 'font-size:26px;letter-spacing:-.4px' }, money(s.UZS)),
+      s.USD ? h('b', { class: dir === 'men' ? 'c-red' : 'c-brand', style: 'font-size:16px' }, '+ ' + money(s.USD, 'USD')) : null,
+      h('span', { class: 't-meta' }, `${s.n} ta ochiq qarz${s.late ? ` · ${s.late} tasi muddatidan o'tgan` : ''}`)),
+    open.length ? open.map(DebtItem) : Empty(dir === 'men' ? 'Hech kimga qarzingiz yo\'q' : 'Hech kim sizga qarzdor emas', 'Pastdagi «+ Qarz» tugmasi bilan qo\'shing.'),
+    closed.length ? [h('div', { class: 'section' }, h('h2', {}, 'Yopilganlar'), h('span', { class: 't-meta' }, `${closed.length} ta`)), closed.map(DebtItem)] : null,
+    h('div', { class: 'fabs' }, h('button', { class: 'fab2 wide2', type: 'button', onclick: () => debtSheet(null) }, '+ Qarz')));
+}
+export function DebtDetail(id) {
+  if (!moneyAllowed()) { go('#/bugun'); return h('main', { class: 'view' }); }
+  if (!M.loaded) return Loading(BackHead('Qarz', '#/pullar/qarzlar'));
+  if (M.set?.pin_hash && !M.unlocked) return Lock();
+  const d = debtOf(id);
+  if (!d) return h('main', { class: 'view' }, BackHead('Qarz', '#/pullar/qarzlar'), Empty('Qarz topilmadi', 'U o\'chirilgan bo\'lishi mumkin.'));
+  const n = debtNums(d), evs = evsOf(d).slice().sort((x, y) => y.event_date.localeCompare(x.event_date) || y.created_at.localeCompare(x.created_at));
+  const pct = n.total ? Math.min(100, Math.round((n.paid / n.total) * 100)) : 0;
+  const men = d.direction === 'men';
+  return h('main', { class: 'view money' },
+    BackHead(d.person, '#/pullar/qarzlar'),
+    h('section', { class: 'card', style: 'gap:6px' },
+      h('div', { class: 'between' }, h('small', { class: 't-meta' }, men ? 'Men qarzdorman · qolgan' : 'Menga qarzdor · qolgan'), dueChip(d)),
+      h('b', { class: n.left <= 0 ? '' : men ? 'c-red' : 'c-brand', style: 'font-size:28px;letter-spacing:-.5px' }, n.left <= 0 ? 'Yopildi' : money(n.left, d.currency)),
+      h('div', { class: 'hbar' }, h('i', { style: `width:${pct}%` })),
+      h('div', { class: 'between t-meta' }, h('span', {}, `Jami: ${money(n.total, d.currency)}`), h('span', {}, `Qaytarildi: ${money(n.paid, d.currency)} · ${pct}%`)),
+      d.note && h('div', { class: 't-meta', style: 'font-size:13px' }, d.note)),
+    h('div', { class: 'row' },
+      h('button', { class: 'btn', type: 'button', disabled: n.left <= 0, onclick: () => eventSheet(d, 'kamaydi') }, men ? 'Qaytardim' : 'Qaytardi'),
+      h('button', { class: 'btn ghost', type: 'button', onclick: () => eventSheet(d, 'oshdi') }, men ? 'Yana oldim' : 'Yana berdim')),
+    h('div', { class: 'section' }, h('h2', {}, 'Tarix'), h('span', { class: 't-meta' }, `${evs.length} ta`)),
+    h('div', { class: 'list' }, evs.map((e) => h('button', { type: 'button', class: 'txrow', onclick: () => eventSheet(d, e.type, e) },
+      h('i', { class: 'txico ' + (e.type === 'oshdi' ? 'qarz' : 'kirim'), 'aria-hidden': 'true' }, e.type === 'oshdi' ? '＋' : '✓'),
+      h('span', { class: 'txmid' }, h('b', {}, e.type === 'oshdi' ? (men ? 'Qarz oldim' : 'Qarz berdim') : (men ? 'Qaytardim' : 'Qaytardi')),
+        h('small', {}, [fmtDate(e.event_date), e.account_id ? accOf(e.account_id)?.name : 'hisobga tegmagan', e.note].filter(Boolean).join(' · '))),
+      h('b', { class: 'txamt' }, money(num(e.amount), d.currency, e.type === 'oshdi' ? '+' : '−'))))),
+    h('div', { class: 'row' },
+      h('button', { class: 'btn ghost small', type: 'button', onclick: () => debtSheet(d) }, 'Tahrirlash'),
+      h('button', { class: 'btn danger small', type: 'button', onclick: async () => {
+        if (!await confirmBox({ title: 'Qarz o\'chirilsinmi?', text: 'Butun tarixi bilan o\'chadi, hisoblardagi qoldiq ham shunga qarab qaytadi.', ok: 'O\'chirish', danger: true })) return;
+        const { error } = await sb.from('fin_debts').delete().eq('id', d.id);
+        if (error) { toast('O\'chirib bo\'lmadi'); return; }
+        go('#/pullar/qarzlar'); reload('O\'chirildi');
+      } }, 'O\'chirish')));
+}
+/** Hisob tanlash: qarz valyutasidagi hisoblar va «hisobga tegmasin». */
+function accPicker(id, cur, value) {
+  const list = M.accounts.filter((a) => a.currency === cur && (!a.archived || a.id === value));
+  const sel = h('select', { class: 'input', id }, h('option', { value: '' }, 'Hisobga tegmasin'), list.map((a) => h('option', { value: a.id }, a.name)));
+  sel.value = value ?? '';
+  return sel;
+}
+function debtSheet(d = null) {
+  let dir = d?.direction || M.debtDir, cur = d?.currency || 'UZS';
+  sheet(d ? 'Qarzni tahrirlash' : 'Yangi qarz', (close) => {
+    const dirBox = h('div', { class: 'seg' }), curBox = h('div', { class: 'seg' }), hint = h('small', { class: 't-meta' }), accLabel = h('label', { for: 'd_acc' }), whoLabel = h('label', { for: 'd_person' });
+    const person = h('input', { class: 'input', id: 'd_person', maxlength: 80, value: d?.person || '', placeholder: 'Masalan: Akmal aka' });
+    const amt = amountInput('d_amt', null);
+    const date = h('input', { class: 'input', id: 'd_date', type: 'date', value: today() });
+    const due = h('input', { class: 'input', id: 'd_due', type: 'date', value: d?.due_date || '' });
+    const note = h('input', { class: 'input', id: 'd_note', maxlength: 300, value: d?.note || '', placeholder: 'Nima uchun, qanday kelishildi' });
+    const accBox = h('div', { class: 'field' });
+    const err = h('div', { class: 'err' });
+    const paint = () => {
+      dirBox.replaceChildren(...Object.entries(DIR).map(([k, l]) => h('button', { type: 'button', class: (dir === k ? 'on ' : '') + (k === 'men' ? 'k-chiqim' : 'k-kirim'), disabled: !!d, 'aria-pressed': String(dir === k), onclick: () => { dir = k; paint(); } }, l)));
+      curBox.replaceChildren(...[['UZS', 'So\'m'], ['USD', 'Dollar']].map(([k, l]) => h('button', { type: 'button', class: cur === k ? 'on' : '', disabled: !!d, 'aria-pressed': String(cur === k), onclick: () => { cur = k; paint(); } }, l)));
+      whoLabel.textContent = dir === 'men' ? 'Kimdan qarz olganman' : 'Kimga qarz berganman';
+      accLabel.textContent = dir === 'men' ? 'Pul qaysi hisobga tushdi' : 'Pul qaysi hisobdan chiqdi';
+      const prev = accBox.querySelector('select')?.value || '';
+      accBox.replaceChildren(accLabel, accPicker('d_acc', cur, prev), hint);
+      hint.textContent = 'Eski qarz bo\'lsa yoki pul hamyonga kirmagan bo\'lsa — «Hisobga tegmasin» qoldiring.';
+    };
+    paint();
+    setTimeout(() => { if (!d) person.focus(); }, 80);
+    return [
+      h('div', { class: 'field' }, h('label', {}, 'Kim kimga qarzdor'), dirBox),
+      h('div', { class: 'field' }, whoLabel, person),
+      !d && h('div', { class: 'field' }, h('label', { for: 'd_amt' }, 'Qarz summasi (hozir qancha qolgan)'), amt),
+      !d && h('div', { class: 'field' }, h('label', {}, 'Valyuta'), curBox),
+      !d && accBox,
+      h('div', { class: 'row' },
+        !d && h('div', { class: 'field', style: 'flex:1' }, h('label', { for: 'd_date' }, 'Qachon'), date),
+        h('div', { class: 'field', style: 'flex:1' }, h('label', { for: 'd_due' }, 'Qaytarish muddati'), due)),
+      h('div', { class: 'field' }, h('label', { for: 'd_note' }, 'Izoh (ixtiyoriy)'), note),
+      err,
+      h('div', { class: 'row' }, h('button', { class: 'btn ghost', type: 'button', onclick: close }, 'Bekor'),
+        h('button', { class: 'btn', type: 'button', onclick: async (ev) => {
+          if (!person.value.trim()) { err.textContent = 'Kimligini yozing'; person.focus(); return; }
+          const v = d ? null : parseAmount(amt.value);
+          if (!d && !(v > 0)) { err.textContent = 'Summani kiriting'; amt.focus(); return; }
+          ev.target.disabled = true;
+          const row = { person: person.value.trim(), due_date: due.value || null, note: note.value.trim() || null };
+          if (d) {
+            const { error } = await sb.from('fin_debts').update(row).eq('id', d.id);
+            ev.target.disabled = false;
+            if (error) { err.textContent = 'Saqlab bo\'lmadi: ' + error.message; return; }
+            close(); reload('Saqlandi'); return;
+          }
+          const { data: nd, error } = await sb.from('fin_debts').insert({ ...row, direction: dir, currency: cur }).select().single();
+          if (error || !nd) { ev.target.disabled = false; err.textContent = 'Saqlab bo\'lmadi: ' + (error?.message || ''); return; }
+          const acc = accBox.querySelector('select')?.value || null;
+          const { error: e2 } = await sb.from('fin_debt_events').insert({ debt_id: nd.id, type: 'oshdi', amount: v, account_id: acc, event_date: date.value || today() });
+          if (e2) { await sb.from('fin_debts').delete().eq('id', nd.id); ev.target.disabled = false; err.textContent = 'Saqlab bo\'lmadi: ' + e2.message; return; }
+          M.debtDir = dir; close(); go('#/pullar/qarz/' + nd.id); reload('Qarz qo\'shildi');
+        } }, 'Saqlash'))];
+  });
+}
+function eventSheet(d, type, e = null) {
+  const men = d.direction === 'men', n = debtNums(d);
+  const maxPay = n.left + (e && e.type === 'kamaydi' ? num(e.amount) : 0);
+  const title = e ? 'Yozuvni tahrirlash' : type === 'kamaydi' ? (men ? 'Qarzni qaytardim' : 'Qarz qaytdi') : (men ? 'Yana qarz oldim' : 'Yana qarz berdim');
+  const lastAcc = (() => { try { return localStorage.getItem('devon_m_acc'); } catch (x) { return null; } })();
+  const defAcc = e ? e.account_id : type === 'kamaydi' && M.accounts.some((a) => a.id === lastAcc && a.currency === d.currency && !a.archived) ? lastAcc : '';
+  sheet(title, (close) => {
+    const amt = amountInput('e_amt', e ? num(e.amount) : null);
+    const acc = accPicker('e_acc', d.currency, defAcc);
+    const date = h('input', { class: 'input', id: 'e_date', type: 'date', value: e?.event_date || today() });
+    const note = h('input', { class: 'input', id: 'e_note', maxlength: 300, value: e?.note || '' });
+    const err = h('div', { class: 'err' });
+    setTimeout(() => { if (!e) amt.focus(); }, 80);
+    const inLabel = type === 'kamaydi' ? (men ? 'Qaysi hisobdan to\'ladim' : 'Qaysi hisobga tushdi') : (men ? 'Qaysi hisobga tushdi' : 'Qaysi hisobdan berdim');
+    return [
+      h('div', { class: 'field' }, h('label', { for: 'e_amt', class: 'between' }, h('span', {}, 'Summa'),
+        type === 'kamaydi' && maxPay > 0 && h('button', { type: 'button', class: 'linkbtn', onclick: () => { amt.value = group(maxPay).replace(',00', ''); } }, `Hammasi: ${money(maxPay, d.currency)}`)), amt),
+      h('div', { class: 'field' }, h('label', { for: 'e_acc' }, inLabel), acc),
+      h('div', { class: 'field' }, h('label', { for: 'e_date' }, 'Sana'), date),
+      h('div', { class: 'field' }, h('label', { for: 'e_note' }, 'Izoh (ixtiyoriy)'), note),
+      err,
+      h('div', { class: 'row' },
+        e ? h('button', { class: 'btn danger', type: 'button', onclick: async () => {
+          if (evsOf(d).length === 1) { toast('Bu yagona yozuv. Butun qarzni o\'chirish uchun «O\'chirish» tugmasini bosing'); return; }
+          if (!await confirmBox({ title: 'Yozuv o\'chirilsinmi?', ok: 'O\'chirish', danger: true })) return;
+          const { error } = await sb.from('fin_debt_events').delete().eq('id', e.id);
+          if (error) { toast('O\'chirib bo\'lmadi'); return; }
+          close(); reload('O\'chirildi');
+        } }, 'O\'chirish') : h('button', { class: 'btn ghost', type: 'button', onclick: close }, 'Bekor'),
+        h('button', { class: 'btn', type: 'button', onclick: async (ev) => {
+          const v = parseAmount(amt.value);
+          if (!(v > 0)) { err.textContent = 'Summani kiriting'; amt.focus(); return; }
+          if (type === 'kamaydi' && v > maxPay + 0.001) { err.textContent = `Qolgan qarzdan ko'p: ko'pi bilan ${money(maxPay, d.currency)}`; return; }
+          if (type === 'oshdi' && e && evsOf(d).filter((x) => x.type === 'oshdi' && x.id !== e.id).reduce((s, x) => s + num(x.amount), 0) + v < n.paid - 0.001) { err.textContent = 'Bunda qaytarilgan summa qarzdan ko\'p bo\'lib qoladi'; return; }
+          const row = { type, amount: v, account_id: acc.value || null, event_date: date.value || today(), note: note.value.trim() || null };
+          ev.target.disabled = true;
+          const { error } = e ? await sb.from('fin_debt_events').update(row).eq('id', e.id) : await sb.from('fin_debt_events').insert({ ...row, debt_id: d.id });
+          ev.target.disabled = false;
+          if (error) { err.textContent = 'Saqlab bo\'lmadi: ' + error.message; return; }
+          if (acc.value) { try { localStorage.setItem('devon_m_acc', acc.value); } catch (x) { /* xotira yopiq */ } }
+          const closing = !e && type === 'kamaydi' && Math.abs(v - maxPay) < 0.001;
+          close(); reload(closing ? (men ? 'Qarz to\'liq yopildi' : 'Qarz to\'liq qaytdi') : 'Saqlandi');
+        } }, 'Saqlash'))];
+  });
+}
+
 // ---------- Sozlamalar: hisoblar, toifalar, himoya ----------
 function accSheet(acc = null) {
-  const used = acc && M.tx.some((t) => t.account_id === acc.id || t.to_account_id === acc.id);
+  const used = acc && (M.tx.some((t) => t.account_id === acc.id || t.to_account_id === acc.id) || M.devs.some((e) => e.account_id === acc.id));
   sheet(acc ? 'Hisobni tahrirlash' : 'Yangi hisob', (close) => {
     const name = h('input', { class: 'input', id: 'a_name', maxlength: 60, value: acc?.name || '', placeholder: 'Masalan: Humo karta' });
     let kind = acc?.kind || 'karta', cur = acc?.currency || 'UZS';
@@ -462,11 +688,15 @@ function exportRows() {
   const cats = {};
   for (const t of M.tx) { if (t.kind !== 'chiqim' || curOf(t.account_id) !== 'UZS') continue; const k = `${t.tx_date.slice(0, 7)}|${catOf(t.category_id)?.name || 'Toifasiz'}`; cats[k] = (cats[k] || 0) + num(t.amount); }
   const byCat = [['Oy', 'Toifa', 'Chiqim (so\'m)'], ...Object.keys(cats).sort().map((k) => { const [m, c] = k.split('|'); return [monthName(m + '-01'), c, cats[k]]; })];
-  return [['Yozuvlar', rows], ['Oylar', mon], ['Toifalar', byCat], ['Hisoblar', accs]];
+  const debts = [['Kim', 'Turi', 'Valyuta', 'Jami', 'Qaytarilgan', 'Qolgan', 'Muddat', 'Izoh'],
+    ...M.debts.map((d) => { const n = debtNums(d); return [d.person, DIR[d.direction], d.currency, n.total, n.paid, n.left, d.due_date ? fmtDate(d.due_date) : '', d.note || '']; })];
+  const devs = [['Sana', 'Kim', 'Harakat', 'Summa', 'Valyuta', 'Hisob', 'Izoh'],
+    ...M.devs.map((e) => { const d = debtOf(e.debt_id) || {}; return [fmtDate(e.event_date), d.person || '', e.type === 'oshdi' ? (d.direction === 'men' ? 'Qarz oldim' : 'Qarz berdim') : (d.direction === 'men' ? 'Qaytardim' : 'Qaytardi'), num(e.amount), d.currency || '', e.account_id ? accOf(e.account_id)?.name || '' : '', e.note || '']; })];
+  return [['Yozuvlar', rows], ['Oylar', mon], ['Toifalar', byCat], ['Hisoblar', accs], ['Qarzlar', debts], ['Qarz tarixi', devs]];
 }
 let exporting = false;
 async function exportExcel() {
-  if (!M.tx.length) { toast('Hali yozuv yo\'q'); return; }
+  if (!M.tx.length && !M.debts.length) { toast('Hali yozuv yo\'q'); return; }
   const blob = buildXlsx(exportRows()), name = `Pullar_${today()}.xlsx`;
   if (!(S.settings.drive && S.settings.drive.connected)) {
     const url = URL.createObjectURL(blob);
@@ -508,6 +738,6 @@ export function MoneySettings() {
       M.set?.pin_hash && row('PIN-kodni olib tashlash', null, async () => { if (await confirmBox({ title: 'PIN-kod olib tashlansinmi?', ok: 'Olib tashlash' }) && await saveSettings({ pin_hash: null })) { toast('PIN-kod olib tashlandi'); bus.render(); } }),
       row(hidden() ? 'Summalarni ko\'rsatish' : 'Summalarni yashirish', 'Odamlar orasida ochganda raqamlar ko\'rinmaydi', async () => { if (await saveSettings({ hide_amounts: !hidden() })) bus.render(); })),
     h('div', { class: 'section' }, h('h2', {}, 'Fayl')),
-    h('div', { class: 'list' }, row('Excelga chiqarish', 'Hamma yozuvlar, oylar, toifalar va hisoblar', exportExcel)),
+    h('div', { class: 'list' }, row('Excelga chiqarish', 'Hamma yozuvlar, oylar, toifalar, hisoblar va qarzlar', exportExcel)),
     h('div', { class: 't-meta', style: 'padding:4px 4px 0' }, 'Bu bo\'limdagi ma\'lumotlarni faqat siz ko\'rasiz. Ular bildirishnoma, umumiy statistika va hisobotlarga tushmaydi.'));
 }
