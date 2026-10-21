@@ -424,6 +424,8 @@ export function More() {
   const soon = () => toast('Bu bo\'lim keyingi bosqichda qo\'shiladi');
   return h('main', { class: 'view' },
     Head(`${S.me.short_name}${S.me.is_admin ? ' · admin' : ''}`, 'Yana'),
+    S.me.kind === 'yordamchi' && [h('div', { class: 'section' }, h('h2', { style: 'font-size:13px;color:var(--muted)' }, 'Shaxsiy')),
+      h('div', { class: 'list' }, row('Pullar', 'Kirim-chiqim, pul qayerga ketyapti · faqat sizga ko\'rinadi', () => go('#/pullar')))],
     h('div', { class: 'section' }, h('h2', { style: 'font-size:13px;color:var(--muted)' }, 'Ishlar')),
     h('div', { class: 'list' },
       row('Statistika', 'Natijalar, grafiklar, ikkalamiz yonma-yon', () => go('#/statistika')),

@@ -357,3 +357,70 @@ html, body { overflow-x: hidden; overscroll-behavior-x: none; }
 :root[data-theme="tun"] .nav.side a { color: var(--ink); }
 :root[data-theme="tun"] .nav.side a.on { color: var(--brand-dark); }
 :root[data-theme="tun"] .nav.side a.btn.newtask { color: #fff; }
+
+/* ---------- Pullar (shaxsiy hamyon) ---------- */
+:root:not(.wide) .sheet { max-height: calc(100dvh - 24px); overflow-y: auto; }
+.money .head .sub { color: var(--brand); font-weight: 600; }
+.balcard { gap: 4px; background: var(--brand); color: #fff; }
+.balcard > small { font-size: 13px; opacity: .85; font-weight: 500; }
+.balcard .balbig { font-size: 28px; font-weight: 700; letter-spacing: -.5px; line-height: 1.2; overflow-wrap: anywhere; }
+.balcard .balusd { font-size: 14px; font-weight: 600; opacity: .9; }
+.balcard .accs { margin-top: 8px; }
+.accchip { min-height: 48px; padding: 4px 12px; border: 1px solid rgba(255,255,255,.35); border-radius: 12px; background: rgba(255,255,255,.1); color: #fff; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 0; white-space: nowrap; cursor: pointer; font-size: 12px; }
+.accchip b { font-size: 14px; font-weight: 700; }
+.accchip.on { background: #fff; color: var(--brand-dark); border-color: #fff; }
+.monthbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+.monthbar b { font-size: 16px; font-weight: 700; text-transform: capitalize; }
+.monthbar .iconbtn:disabled { opacity: .35; cursor: default; }
+.tiles.t3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tiles.t3 .tile b { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mrow { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.mrow .mname { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; }
+.mrow .mname i { font-style: normal; width: 22px; text-align: center; }
+.mrow > .between > span:last-child { white-space: nowrap; }
+.hbar i.over { background: var(--red); } .hbar i.amber { background: #B97A00; }
+.mchart { display: flex; align-items: flex-end; gap: 6px; height: 150px; }
+.mcol { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; border: none; background: none; padding: 0; cursor: pointer; color: var(--ink); border-radius: 8px; }
+.mcol small { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.mcol span { font-size: 11px; color: var(--muted); font-weight: 600; }
+.mcol.now span { color: var(--ink); font-weight: 700; }
+.mcol.now { background: var(--soft); }
+.mbars { display: flex; align-items: flex-end; gap: 3px; height: 100px; }
+.mbars i { display: block; width: 12px; border-radius: 4px 4px 0 0; }
+.mbars i.in, .legend i.in { background: var(--brand); }
+.mbars i.out, .legend i.out { background: var(--red); }
+.dayhead { padding: 6px 4px 0; font-size: 13px; font-weight: 700; color: var(--muted); }
+.list button.txrow { min-height: 62px; justify-content: flex-start; }
+.txico { flex: none; width: 38px; height: 38px; border-radius: 12px; background: var(--soft); display: flex; align-items: center; justify-content: center; font-style: normal; font-size: 18px; }
+.txico.kirim { background: var(--brand-tint); } .txico.otkazma { background: var(--blue-tint); color: var(--blue); font-weight: 700; }
+.txmid { flex: 1; min-width: 0; }
+.txmid b, .txmid small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.txmid small { display: block; }
+.txamt { flex: none; font-size: 15px; white-space: nowrap; }
+.txamt.kirim { color: var(--brand); } .txamt.otkazma { color: var(--muted); }
+.fabs { position: fixed; right: max(20px, calc(50% - 240px)); bottom: calc(80px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 10px; z-index: 6; }
+.fabs .fab { position: static; border: none; cursor: pointer; }
+.fab2 { min-height: 44px; padding: 0 16px; border-radius: 22px; border: 1px solid var(--line); background: var(--card); color: var(--brand); font-weight: 700; font-size: 14px; cursor: pointer; box-shadow: 0 4px 12px rgba(20,32,29,.12); }
+.wide .fabs { bottom: 28px; }
+.money-in { font-size: 24px; font-weight: 700; letter-spacing: -.3px; }
+.pin-in { font-size: 24px; letter-spacing: 8px; text-align: center; }
+.seg button.k-chiqim.on { color: var(--red); } .seg button.k-kirim.on { color: var(--brand); } .seg button.k-otkazma.on { color: var(--blue); }
+.seg button:disabled { opacity: .5; cursor: default; }
+.catgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+.catbtn { min-height: 64px; padding: 6px 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; font-size: 12px; font-weight: 600; text-align: center; line-height: 1.2; }
+.catbtn i { font-style: normal; font-size: 20px; }
+.catbtn.on { border-color: var(--brand); background: var(--brand-tint); color: var(--brand-dark); box-shadow: inset 0 0 0 1px var(--brand); }
+.lockcard { align-items: center; text-align: center; padding: 28px 20px; gap: 12px; }
+.lockcard .lockico { width: 60px; height: 60px; border-radius: 18px; background: var(--brand-tint); color: var(--brand); display: flex; align-items: center; justify-content: center; }
+.lockcard .input, .lockcard .btn { width: 100%; max-width: 280px; }
+:root[data-theme="tun"] .balcard { background: var(--brand-tint); color: var(--ink); }
+:root[data-theme="tun"] .accchip { color: var(--ink); border-color: var(--line); background: var(--card); }
+:root[data-theme="tun"] .accchip.on { background: var(--brand); color: #fff; border-color: var(--brand); }
+:root[data-theme="tun"] .catbtn.on { color: var(--brand-dark); }
+:root[data-theme="tun"] .fab2 { color: var(--brand-dark); }
+.view.money { padding-bottom: calc(160px + env(safe-area-inset-bottom)); }
+.wide .fabs { right: 32px; bottom: 28px; }
+.wide .fabs .fab { display: flex; }
+.wide .view.money { padding-bottom: 110px; }
+.starthint { background: var(--amber-tint); color: var(--amber); }
+.starthint b { color: var(--ink); }

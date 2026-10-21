@@ -1,7 +1,8 @@
 import { sb, S, bus, h, icon, loadBase, loadTasks, loadAll, toast, countUp, wide, WIDE_MQ } from './core.js';
 import { ReportsView, ReportDetail, pendingForMe } from './plan.js';
 import { loadExtra, runRecurrences, calShift, calGoto, pendingReminders, pendingDueTasks, Calendar, Reminders, Recurrences, Admin, WaitingOn } from './extra.js';
-import { loadMore, applyTheme, Notifications, MySettings, FromText, navItems, NAV_CHOICES } from './more.js';
+import { loadMore, applyTheme, Notifications, MySettings, FromText, navItems, navChoices } from './more.js';
+import { Money, MoneySettings } from './money.js';
 import { driveReturn } from './files.js';
 import { Stats } from './stats.js';
 import { registerDevice } from './native.js';
@@ -62,7 +63,7 @@ function Nav(active) {
     icon(ic), href === '#/eslatmalar' && wide() ? 'Eslatmalar' : label, href === '#/tasdiq' && n > 0 ? h('span', { class: 'badge' }, n) : null);
   if (!wide()) return h('nav', { class: 'nav', 'aria-label': 'Asosiy menyu' }, h('div', { class: 'in' }, navItems().map(link)));
   // Kompyuterda: chap tomonda hamma bo'limlar doim ko'rinib turadi
-  const all = [['#/bugun', 'Bugun', 'home'], ...NAV_CHOICES, ['#/yana', 'Yana', 'more']];
+  const all = [['#/bugun', 'Bugun', 'home'], ...navChoices(), ['#/yana', 'Yana', 'more']];
   return h('nav', { class: 'nav side', 'aria-label': 'Asosiy menyu' }, h('div', { class: 'in' },
     h('a', { class: 'brandmark', href: '#/bugun', 'aria-label': 'Devon — bosh sahifa', html:
       '<svg width="34" height="34" viewBox="0 0 120 120" aria-hidden="true"><rect width="120" height="120" rx="28" fill="#0B6B58"/><rect x="28" y="30" width="28" height="60" rx="5" fill="#fff"/><rect x="64" y="30" width="28" height="60" rx="5" fill="#fff"/><rect x="56" y="26" width="8" height="68" rx="4" fill="#E3B341"/></svg><b>Devon</b>' }),
@@ -91,6 +92,8 @@ function route() {
   if (hash === '#/hisobot') return [ReportsView(), hash];
   if ((m = hash.match(/^#\/hisobot\/([0-9a-f-]+)$/))) return [ReportDetail(m[1]), '#/hisobot'];
   if (hash === '#/statistika') return [Stats(), '#/yana'];
+  if (hash === '#/pullar') return [Money(), hash];
+  if (hash === '#/pullar/sozlama') return [MoneySettings(), '#/pullar'];
   if (hash === '#/yana') return [More(), hash];
   if (hash === '#/savat') return [Trash(), '#/yana'];
   location.hash = '#/bugun';

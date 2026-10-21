@@ -129,22 +129,24 @@ export function AchievementsCard() {
 // ---------- Mening sozlamalarim ----------
 // ---------- Pastki menyu: o'rtadagi bo'limlarni har kim o'zi tanlaydi (shu telefonda saqlanadi) ----------
 export const NAV_CHOICES = [['#/ishlar', 'Ishlar', 'list'], ['#/taqvim', 'Taqvim', 'cal'], ['#/tasdiq', 'Tasdiq', 'check'], ['#/hisobot', 'Hisobot', 'chart'], ['#/statistika', 'Statistika', 'stats'],
-  ['#/eslatmalar', 'Eslatma', 'bell'], ['#/kutilmoqda', 'Kutilmoqda', 'clock']];
+  ['#/eslatmalar', 'Eslatma', 'bell'], ['#/kutilmoqda', 'Kutilmoqda', 'clock'], ['#/pullar', 'Pullar', 'wallet']];
+/** «Pullar» — yordamchining shaxsiy bo'limi, boshqa foydalanuvchiga menyuda ko'rinmaydi. */
+export const navChoices = () => NAV_CHOICES.filter(([hh]) => hh !== '#/pullar' || S.me?.kind === 'yordamchi');
 const NAV_DEFAULT = ['#/ishlar', '#/taqvim', '#/tasdiq', '#/hisobot'], NAV_MAX = 4;
 function navPick() {
   let p = null; try { p = JSON.parse(store.get('devon_nav') || 'null'); } catch (e) { /* buzilgan */ }
-  return Array.isArray(p) && p.length ? p.filter((x) => NAV_CHOICES.some(([hh]) => hh === x)).slice(0, NAV_MAX) : NAV_DEFAULT;
+  return Array.isArray(p) && p.length ? p.filter((x) => navChoices().some(([hh]) => hh === x)).slice(0, NAV_MAX) : NAV_DEFAULT;
 }
 export function navItems() {
   const p = navPick();
-  return [['#/bugun', 'Bugun', 'home'], ...NAV_CHOICES.filter(([hh]) => p.includes(hh)), ['#/yana', 'Yana', 'more']];
+  return [['#/bugun', 'Bugun', 'home'], ...navChoices().filter(([hh]) => p.includes(hh)), ['#/yana', 'Yana', 'more']];
 }
 function NavSettings() {
   const p = navPick();
   return [h('div', { class: 'section' }, h('h2', {}, 'Pastki menyu')),
     h('section', { class: 'card' },
       h('div', { class: 't-meta' }, `«Bugun» va «Yana» doim turadi. O'rtaga ${NAV_MAX} tagacha bo'limni o'zingiz tanlang.`),
-      NAV_CHOICES.map(([href, label, ic]) => {
+      navChoices().map(([href, label, ic]) => {
         const box = h('input', { type: 'checkbox', checked: p.includes(href), onchange: () => {
           const next = box.checked ? [...p, href] : p.filter((x) => x !== href);
           if (next.length > NAV_MAX) { box.checked = false; toast(`Ko'pi bilan ${NAV_MAX} ta. Avval bittasini olib tashlang`); return; }
