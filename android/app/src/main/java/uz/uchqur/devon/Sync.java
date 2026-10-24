@@ -40,15 +40,19 @@ public class Sync extends Worker {
         WorkManager.getInstance(c).enqueueUniquePeriodicWork("devon-sync", ExistingPeriodicWorkPolicy.KEEP, req);
     }
 
-    static void now(Context c) { run(c, null); }
+    static void now(Context c) { run(c, "sync", null); }
 
-    static void toggle(Context c, String itemId) { run(c, itemId); }
+    static void toggle(Context c, String itemId) { run(c, "toggle", itemId); }
 
-    private static void run(Context c, String itemId) {
-        Data.Builder d = new Data.Builder();
+    /** Bildirishnomadagi «Qabul qildim»: internet bo'lmasa, paydo bo'lganda yuboriladi. */
+    static void ack(Context c, String alarmKey) { run(c, "ack", alarmKey); }
+
+    private static void run(Context c, String action, String itemId) {
+        Data.Builder d = new Data.Builder().putString("action", action);
         if (itemId != null) d.putString("item", itemId);
         OneTimeWorkRequest req = new OneTimeWorkRequest.Builder(Sync.class).setConstraints(online()).setInputData(d.build()).build();
-        WorkManager.getInstance(c).enqueueUniqueWork(itemId == null ? "devon-sync-now" : "devon-toggle-" + itemId, ExistingWorkPolicy.REPLACE, req);
+        WorkManager.getInstance(c).enqueueUniqueWork(itemId == null ? "devon-sync-now" : "devon-" + action + "-" + itemId,
+                itemId == null ? ExistingWorkPolicy.REPLACE : ExistingWorkPolicy.KEEP, req);
     }
 
     @NonNull
@@ -57,8 +61,11 @@ public class Sync extends Worker {
         Context c = getApplicationContext();
         if (!Store.registered(c)) return Result.success();
         String item = getInputData().getString("item");
-        Api.Result r = Api.call(c, item == null ? "sync" : "toggle", item);
+        String action = getInputData().getString("action");
+        if (action == null) action = item == null ? "sync" : "toggle";
+        Api.Result r = Api.call(c, action, item);
         if (r.code == 401) { // qurilma uzilgan yoki hisobdan chiqilgan
+            Alarms.cancelAll(c);
             Store.clear(c);
             Widgets.refreshAll(c);
             return Result.success();
@@ -70,6 +77,7 @@ public class Sync extends Worker {
             if (ns != null) for (int i = 0; i < ns.length(); i++) show(c, ns.getJSONObject(i));
             j.remove("notifications");
             Store.saveSnapshot(c, j.toString());
+            if (j.has("alarms")) Alarms.reschedule(c, j.optJSONArray("alarms"));
             Widgets.refreshAll(c);
         } catch (Exception e) { /* javob buzilgan bo'lsa, keyingi safar */ }
         return Result.success();

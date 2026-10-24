@@ -80,6 +80,21 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Bildirishnomadagi «Qabul qildim» tugmasi: eslatma (alarm kaliti «eslatma_id|kun») yoki shu kungi muddati yaqin ishlar
+  if (body.action === "ack" && typeof body.item_id === "string") {
+    const [rid, d] = body.item_id.split("|");
+    if (rid === "muddat" && /^\d{4}-\d{2}-\d{2}$/.test(d ?? "")) {
+      const { data: ts } = await admin.from("tasks").select("id,due_date,status,assignee_id,creator_id,is_private").is("deleted_at", null).not("status", "in", "(bajarildi,bekor,tekshiruvda)");
+      const ids = (ts ?? []).filter((t) => (!t.is_private || t.assignee_id === uid || t.creator_id === uid) && (uid === owner.id || t.assignee_id === uid)
+        && Math.round((dayMs(t.due_date) - dayMs(d)) / 86400000) <= 2).map((t) => ({ task_id: t.id, occ_date: d, user_id: uid }));
+      if (ids.length) await admin.from("task_due_acks").upsert(ids, { onConflict: "task_id,occ_date,user_id", ignoreDuplicates: true });
+    } else if (/^[0-9a-f-]{36}$/.test(rid ?? "") && /^\d{4}-\d{2}-\d{2}$/.test(d ?? "")) {
+      const { data: r } = await admin.from("reminders").select("id,owner_id,for_id,for_both").eq("id", rid).maybeSingle();
+      if (r && (r.for_both || (r.for_id ? r.for_id === uid : r.owner_id === uid)))
+        await admin.from("reminder_acks").upsert({ reminder_id: r.id, occ_date: d, user_id: uid }, { onConflict: "reminder_id,occ_date", ignoreDuplicates: true });
+    }
+  }
+
   // Yangi bildirishnomalar: har qurilma o'zi ko'rgan oxirgi raqamni eslab qoladi
   let notifs: Row[] = [];
   let last = Number(dev.last_notif_id ?? 0);
@@ -93,7 +108,7 @@ Deno.serve(async (req) => {
   }
   await admin.from("devices").update({ last_seen: new Date().toISOString(), last_notif_id: last }).eq("id", dev.id);
 
-  const [planQ, tasksQ, evQ, remQ, recQ, setQ, ackQ] = await Promise.all([
+  const [planQ, tasksQ, evQ, remQ, recQ, setQ, ackQ, dueAckQ] = await Promise.all([
     admin.from("plan_items").select("id,title,at_time,done,owner_id,for_id,is_private,sort,created_at").eq("owner_id", owner.id).eq("plan_date", date),
     admin.from("tasks").select("id,seq,title,due_date,status,assignee_id,creator_id,is_private").is("deleted_at", null).not("status", "in", "(bajarildi,bekor)").order("due_date").limit(200),
     admin.from("events").select("id,title,owner_id,created_by,starts_at,all_day,repeat,is_private"),
@@ -101,6 +116,7 @@ Deno.serve(async (req) => {
     admin.from("recurrences").select("id,next_run,active,is_private,creator_id,assignee_id").eq("active", true),
     admin.from("app_settings").select("value").eq("key", "muhimlik").maybeSingle(),
     admin.from("reminder_acks").select("reminder_id,occ_date").gte("occ_date", addDays(date, -2)),
+    admin.from("task_due_acks").select("task_id").eq("occ_date", date).eq("user_id", uid),
   ]);
 
   const plan = (planQ.data ?? []).filter((i) => !i.is_private || i.owner_id === uid)
@@ -136,8 +152,22 @@ Deno.serve(async (req) => {
       if (!reminderOn(r, d) || acked.has(r.id + "|" + d)) continue;
       const at = r.repeat === "yoq" ? Date.parse(r.remind_at) : atMs(d, String(r.at_time ?? "09:00").slice(0, 5));
       if (at < now - 40 * 60000 || at > now + 2 * 86400000 || at < created) continue;
-      alarms.push({ key: r.id + "|" + d, title: r.title, at, time: hm(at), by: r.for_id && r.for_id === uid && r.owner_id !== uid ? first(r.owner_id) : "" });
+      alarms.push({ kind: "eslatma", key: r.id + "|" + d, title: r.title, at, time: hm(at), by: r.for_id && r.for_id === uid && r.owner_id !== uid ? first(r.owner_id) : "" });
     }
+  }
+  // Muddati yaqin topshiriqlar: har kuni soat 08:00 da bitta xabar (dasturdagi «Muddati yaqin» bilan bir xil qoida:
+  // muddatiga 2 kun va undan kam qolgan yoki o'tgan; yordamchiga ikkalasiniki, rahbarga o'zinikilar). Bugun qabul qilinganlar kirmaydi.
+  const dueAcked = new Set((dueAckQ.data ?? []).map((a) => a.task_id));
+  const dueFor = (d: string) => openTasks.filter((t) => t.status !== "tekshiruvda" && (uid === owner.id || t.assignee_id === uid)
+    && Math.round((dayMs(t.due_date) - dayMs(d)) / 86400000) <= 2);
+  for (const [i, d] of [date, addDays(date, 1)].entries()) {
+    const list = dueFor(d).filter((t) => i > 0 || !dueAcked.has(t.id));
+    const at = atMs(d, "08:00");
+    if (!list.length || at < now - 40 * 60000) continue;
+    const late = list.filter((t) => t.due_date < d).length;
+    alarms.push({ kind: "muddat", key: "muddat|" + d, at, time: "08:00", by: "",
+      title: `Muddati yaqin topshiriqlar: ${list.length} ta` + (late ? ` (${late} tasi kechikkan)` : ""),
+      text: list.slice(0, 5).map((t) => `№${t.seq} ${t.title}`).join("\n") });
   }
 
   // Oy taqvimi: har kun uchun belgilar (m = muddat, u = uchrashuv, e = eslatma, t = takroriy topshiriq)

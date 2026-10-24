@@ -39,3 +39,9 @@ export async function unregisterDevice() {
 
 /** Ma'lumot o'zgarganda vidjet tezroq yangilansin. */
 export function nudge() { if (inApp()) { try { window.DevonNative.sync(); } catch (e) { /* eski qobiq */ } } }
+
+/** Telefon qobig'ining versiyasi (4 = eslatma budilnigi bor). Brauzerda 0. */
+export function appVersion() { if (!inApp()) return 0; try { return Number(window.DevonNative.version()) || 0; } catch (e) { return 0; } }
+/** Budilnik ruxsatlari: 'ok' yoki yetishmayotganlar ro'yxati; eski qobiq yoki brauzerda null. */
+export function alarmStatus() { if (appVersion() < 4) return null; try { return String(window.DevonNative.alarmStatus()); } catch (e) { return null; } }
+export function fixAlarms() { try { window.DevonNative.fixAlarms(); } catch (e) { /* eski qobiq */ } }

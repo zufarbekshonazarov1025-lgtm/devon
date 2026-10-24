@@ -134,7 +134,7 @@ async function runBackup() {
     ["Takroriy", [["Nomi", "Kim yaratgan", "Kimga", "Takror", "Hafta kuni", "Oy kuni", "Muddat (kun)", "Keyingisi", "Yoqilgan", "Shaxsiy"],
       ...recs.map((r) => [r.title, nm(r.creator_id), nm(r.assignee_id), r.freq, r.weekday ?? "", r.monthday ?? "", Number(r.due_offset_days ?? 0), r.next_run, yn(r.active), yn(r.is_private)] as Cell[])]],
     ["Izohlar", [["Topshiriq №", "Kim", "Vaqt", "Izoh"], ...comms.map((c) => [seq(c.task_id), nm(c.author_id), tk(c.created_at), c.body] as Cell[])]],
-    ["Fayllar", [["Topshiriq №", "Fayl", "Havola", "Hajmi (bayt)", "Kim yuklagan", "Vaqt"], ...atts.map((a) => [seq(a.task_id), a.name, a.url, Number(a.size_bytes ?? 0), nm(a.uploader_id), tk(a.created_at)] as Cell[])]],
+    ["Fayllar", [["Topshiriq №", "Eslatma", "Fayl", "Havola", "Hajmi (bayt)", "Kim yuklagan", "Vaqt"], ...atts.map((a) => [seq(a.task_id), (rems.find((r) => r.id === a.reminder_id)?.title as string) ?? "", a.name, a.url, Number(a.size_bytes ?? 0), nm(a.uploader_id), tk(a.created_at)] as Cell[])]],
     ["Rahmatlar", [["Kimdan", "Kimga", "Turi", "Topshiriq №", "Vaqt"], ...kudos.map((k) => [nm(k.from_id), nm(k.to_id), k.kind, seq(k.task_id), tk(k.created_at)] as Cell[])]],
     ["Sozlamalar", [["Kalit", "Qiymat"], ...sets.filter((s) => s.key !== "drive" && s.key !== "zaxira").map((s) => [s.key, JSON.stringify(s.value)] as Cell[])]],
   ];
@@ -230,10 +230,18 @@ Deno.serve(async (req) => {
     return json(req, { ok: true });
   }
 
-  // Qolgan amallar: topshiriq shu foydalanuvchiga ko'rinishi shart (RLS orqali tekshiriladi)
-  const taskId = String(body.task_id ?? "");
-  const { data: task } = await user.asUser.from("tasks").select("id,seq").eq("id", taskId).maybeSingle();
-  if (!task) return json(req, { error: "Topshiriq topilmadi" }, 404);
+  // Qolgan amallar: fayl topshiriqqa yoki eslatmaga biriktiriladi; u shu foydalanuvchiga ko'rinishi shart (RLS orqali tekshiriladi)
+  const isRem = !!body.reminder_id;
+  let task: { id: string; seq: number | null } | null = null;
+  if (isRem) {
+    const { data } = await user.asUser.from("reminders").select("id").eq("id", String(body.reminder_id)).maybeSingle();
+    if (data) task = { id: data.id, seq: null };
+  } else {
+    const { data } = await user.asUser.from("tasks").select("id,seq").eq("id", String(body.task_id ?? "")).maybeSingle();
+    if (data) task = { id: data.id, seq: data.seq };
+  }
+  if (!task) return json(req, { error: isRem ? "Eslatma topilmadi" : "Topshiriq topilmadi" }, 404);
+  const ownerCol = isRem ? "reminder_id" : "task_id";
   const acc = await accessToken();
   if (!acc) return json(req, { error: "Drive ulanmagan" }, 409);
 
@@ -245,7 +253,7 @@ Deno.serve(async (req) => {
     const r = await g(acc.token, "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=UTF-8", "X-Upload-Content-Type": mime, "X-Upload-Content-Length": String(size), Origin: req.headers.get("origin") ?? ORIGINS[0] },
-      body: JSON.stringify({ name: `№${task.seq} ${name}`, parents: [acc.folder], appProperties: { devon_task: task.id, devon_user: user.id } }),
+      body: JSON.stringify({ name: isRem ? `Eslatma ${name}` : `№${task.seq} ${name}`, parents: [acc.folder], appProperties: { devon_task: task.id, devon_user: user.id } }),
     });
     const loc = r.headers.get("location");
     if (!r.ok || !loc) return json(req, { error: "Google seans ochmadi" }, 502);
@@ -258,7 +266,7 @@ Deno.serve(async (req) => {
     const r = await g(acc.token, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,size,mimeType,webViewLink,parents,appProperties,trashed`);
     if (!r.ok) return json(req, { error: "Fayl topilmadi" }, 404);
     const f = await r.json();
-    if (f.trashed || !(f.parents ?? []).includes(acc.folder) || f.appProperties?.devon_task !== task.id || f.appProperties?.devon_user !== user.id) return json(req, { error: "Fayl bu topshiriqqa tegishli emas" }, 403);
+    if (f.trashed || !(f.parents ?? []).includes(acc.folder) || f.appProperties?.devon_task !== task.id || f.appProperties?.devon_user !== user.id) return json(req, { error: isRem ? "Fayl bu eslatmaga tegishli emas" : "Fayl bu topshiriqqa tegishli emas" }, 403);
     const { data: users } = await admin.auth.admin.listUsers();
     const { data: link } = await admin.from("drive_link").select("email").eq("id", 1).maybeSingle();
     const { data: profs } = await admin.from("profiles").select("id");
@@ -269,16 +277,16 @@ Deno.serve(async (req) => {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "user", role: "reader", emailAddress: u.email }),
       });
     }
-    const shown = String(f.name).replace(/^№\d+\s/, "");
-    const { data: row, error } = await admin.from("attachments").insert({ task_id: task.id, uploader_id: user.id, name: shown, url: f.webViewLink, drive_file_id: f.id, size_bytes: Number(f.size ?? 0), mime: f.mimeType }).select().single();
+    const shown = String(f.name).replace(/^(№\d+|Eslatma)\s/, "");
+    const { data: row, error } = await admin.from("attachments").insert({ [ownerCol]: task.id, uploader_id: user.id, name: shown, url: f.webViewLink, drive_file_id: f.id, size_bytes: Number(f.size ?? 0), mime: f.mimeType }).select().single();
     if (error) return json(req, { error: "Ro'yxatga yozilmadi" }, 500);
     return json(req, { attachment: row });
   }
 
   // --- Faylni olib tashlash: Drive savatiga o'tadi (30 kun turadi) ---
   if (action === "remove") {
-    const { data: att } = await admin.from("attachments").select("id,uploader_id,drive_file_id,task_id").eq("id", String(body.attachment_id ?? "")).maybeSingle();
-    if (!att || att.task_id !== task.id) return json(req, { error: "Topilmadi" }, 404);
+    const { data: att } = await admin.from("attachments").select("id,uploader_id,drive_file_id,task_id,reminder_id").eq("id", String(body.attachment_id ?? "")).maybeSingle();
+    if (!att || (isRem ? att.reminder_id : att.task_id) !== task.id) return json(req, { error: "Topilmadi" }, 404);
     if (att.uploader_id !== user.id && !user.isAdmin) return json(req, { error: "Faqat yuklagan kishi yoki admin olib tashlaydi" }, 403);
     if (att.drive_file_id) await g(acc.token, `https://www.googleapis.com/drive/v3/files/${att.drive_file_id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trashed: true }) });
     await admin.from("attachments").delete().eq("id", att.id);

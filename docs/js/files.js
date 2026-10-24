@@ -34,18 +34,20 @@ function paint(taskId) {
 }
 const show = (taskId, text, k) => { if (text) UP.set(taskId, { text, k }); else UP.delete(taskId); paint(taskId); };
 
+/** Fayl kimga biriktiriladi: topshiriq (odatda) yoki eslatma ({ id, reminder: true }). */
+const who = (t) => (t.reminder ? { reminder_id: t.id } : { task_id: t.id });
 async function uploadAll(t, files) {
   for (let i = 0; i < files.length; i++) {
     const f = files[i], tag = files.length > 1 ? `${i + 1}/${files.length} · ` : '';
     show(t.id, `${tag}${f.name}: tayyorlanmoqda…`, 0.03);
     if (!f.size) { toast(`«${f.name}» bo'sh fayl`); continue; }
-    const s = await call({ action: 'session', task_id: t.id, name: f.name, mime: f.type, size: f.size });
+    const s = await call({ action: 'session', ...who(t), name: f.name, mime: f.type, size: f.size });
     if (s.err) { toast(s.err); break; }
     let id;
     try { id = await put(s.data.upload_url, f, (k) => show(t.id, `${tag}${f.name}: yuklanmoqda ${Math.round(k * 100)}%`, 0.05 + k * 0.85)); }
     catch (e) { toast(`«${f.name}» yuklanmadi: ${e.message}`); continue; }
     show(t.id, `${tag}${f.name}: saqlanmoqda…`, 0.95);
-    const d = await call({ action: 'done', task_id: t.id, file_id: id });
+    const d = await call({ action: 'done', ...who(t), file_id: id });
     if (d.err) { toast(d.err); continue; }
     toast(`«${f.name}» biriktirildi`);
     refreshList(t.id);
@@ -56,7 +58,7 @@ async function uploadAll(t, files) {
 /** Ro'yxatni hozir ekranda turgan bo'limda yangilaydi (ekran orada qayta chizilgan bo'lishi mumkin). */
 function refreshList(taskId) { const el = document.getElementById('files_' + taskId); if (el && el._load) el._load(); }
 
-/** Topshiriq ichidagi «Hujjatlar» bo'limi. */
+/** Topshiriq yoki eslatma ichidagi «Hujjatlar» bo'limi. */
 export function Files(t) {
   const list = h('div', { class: 'log', id: 'files_' + t.id }, h('div', { class: 't-meta' }, 'Yuklanmoqda…'));
   const u = UP.get(t.id);
@@ -64,14 +66,14 @@ export function Files(t) {
     h('div', { class: 'between' }, h('span', { class: 'upltext' }, u ? u.text : ''), h('span', { class: 'spin', 'aria-hidden': 'true' })),
     h('div', { class: 'bar' }, h('div', { style: `width:${u ? Math.round(u.k * 100) : 0}%` })));
   const load = async () => {
-    const { data } = await sb.from('attachments').select('*').eq('task_id', t.id).order('created_at');
+    const { data } = await sb.from('attachments').select('*').eq(t.reminder ? 'reminder_id' : 'task_id', t.id).order('created_at');
     const rows = data || [];
     list.replaceChildren(...(rows.length ? rows.map((a) => h('div', { class: 'filerow' },
       h('a', { href: a.url, target: '_blank', rel: 'noopener', class: 'filelink' }, icon('file', 20),
         h('span', { style: 'min-width:0' }, h('b', {}, a.name), h('small', { class: 't-meta', style: 'display:block' }, [size(a.size_bytes), nameOf(a.uploader_id, true), fmtDateTime(a.created_at)].filter(Boolean).join(' · ')))),
       (a.uploader_id === S.me.id || S.me.is_admin) && h('button', { class: 'xbtn sm', type: 'button', 'aria-label': `«${a.name}» faylini olib tashlash`, onclick: async () => {
-        if (!await confirmBox({ title: 'Fayl olib tashlansinmi?', text: 'U topshiriqdan chiqadi va Drive savatiga o\'tadi (30 kun turadi).', ok: 'Olib tashlash' })) return;
-        const r = await call({ action: 'remove', task_id: t.id, attachment_id: a.id });
+        if (!await confirmBox({ title: 'Fayl olib tashlansinmi?', text: `U ${t.reminder ? 'eslatmadan' : 'topshiriqdan'} chiqadi va Drive savatiga o'tadi (30 kun turadi).`, ok: 'Olib tashlash' })) return;
+        const r = await call({ action: 'remove', ...who(t), attachment_id: a.id });
         if (r.err) { toast(r.err); return; } refreshList(t.id);
       } }, '×'))) : [h('div', { class: 't-meta' }, 'Hujjat biriktirilmagan.')]));
   };

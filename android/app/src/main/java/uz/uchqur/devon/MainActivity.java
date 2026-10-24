@@ -153,9 +153,10 @@ public class MainActivity extends AppCompatActivity {
 
         web.addJavascriptInterface(new Bridge(), "DevonNative");
         Sync.ensureChannel(this);
+        Alarms.ensureChannel(this);
         Sync.schedule(this);
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 7);
+        if (Store.registered(this)) Alarms.restore(this);
+        Perms.askAll(this, false);
 
         String route = getIntent() != null ? getIntent().getStringExtra("route") : null;
         if (state != null && route == null) web.restoreState(state); else web.loadUrl(HOME + (route != null ? route : ""));
@@ -177,11 +178,16 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface public void registered() { Store.setRegistered(MainActivity.this, true); Sync.now(MainActivity.this); }
 
-        @JavascriptInterface public void signedOut() { Store.clear(MainActivity.this); Widgets.refreshAll(MainActivity.this); }
+        @JavascriptInterface public void signedOut() { Alarms.cancelAll(MainActivity.this); Store.clear(MainActivity.this); Widgets.refreshAll(MainActivity.this); }
 
         @JavascriptInterface public void sync() { if (Store.registered(MainActivity.this)) Sync.now(MainActivity.this); }
 
-        @JavascriptInterface public int version() { return 3; }
+        @JavascriptInterface public int version() { return 4; }
+
+        /** Budilnik aniq vaqtida chalishi uchun ruxsatlar holati: «ok» yoki nima yetishmayotgani. */
+        @JavascriptInterface public String alarmStatus() { return Perms.status(MainActivity.this); }
+
+        @JavascriptInterface public void fixAlarms() { runOnUiThread(() -> Perms.askAll(MainActivity.this, true)); }
     }
 
     private void openOutside(Uri uri) {
