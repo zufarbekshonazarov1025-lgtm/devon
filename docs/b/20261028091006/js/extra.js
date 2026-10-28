@@ -1,10 +1,10 @@
 import { TaskCard } from './views.js';
-import { DriveCard } from './files.js';
-import { nudge } from './native.js';
+import { DriveCard, Files } from './files.js';
+import { nudge, inApp, appVersion, alarmStatus, fixAlarms } from './native.js';
 import { sb, S, bus, h, icon, toast, confirmBox, today, iso, fmtDate, fmtDateTime, isOpen, nameOf, go, Head, BackHead, Empty,
   addDays, mondayOf, monthStart, monthEnd, fmtDay, monthName, loadTasks, loadBase, ping, owner, daysLeft, dueChip } from './core.js';
 
-S.events = []; S.reminders = []; S.recs = []; S.acks = []; S.dueAcks = [];
+S.events = []; S.reminders = []; S.recs = []; S.acks = []; S.dueAcks = []; S.remFiles = {};
 const HAFTA_Q = ['Du', 'Se', 'Ch', 'Pa', 'Ju', 'Sh', 'Ya'];
 const HAFTA_T = ['Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba', 'Yakshanba'];
 const wd = (s) => ((new Date(s + 'T12:00:00').getDay() + 6) % 7) + 1; // 1 = dushanba … 7 = yakshanba
@@ -22,6 +22,9 @@ export async function loadExtra() {
   ]);
   if (!ak.error) S.acks = ak.data || [];
   if (!da.error) S.dueAcks = da.data || [];
+  // Eslatmalarga biriktirilgan fayllar soni (ro'yxatda belgi uchun)
+  const rf = await sb.from('attachments').select('reminder_id').not('reminder_id', 'is', null);
+  if (!rf.error) { S.remFiles = {}; for (const a of rf.data || []) S.remFiles[a.reminder_id] = (S.remFiles[a.reminder_id] || 0) + 1; }
   if (!ev.error) S.events = ev.data || [];
   if (!rm.error) S.reminders = rm.data || [];
   if (!rc.error) S.recs = rc.data || [];
@@ -306,7 +309,7 @@ async function reminderForm(r) {
     { id: 'is_private', label: 'Faqat menga ko\'rinsin', type: 'check', value: r?.is_private, show: (x) => !x.for_both },
   ] });
   if (!v) return;
-  if (v.__delete) { const { error } = await sb.from('reminders').delete().eq('id', r.id); if (error) { toast('O\'chirib bo\'lmadi'); return; } await loadExtra(); bus.render(); return; }
+  if (v.__delete) { const { error } = await sb.from('reminders').delete().eq('id', r.id); if (error) { toast('O\'chirib bo\'lmadi'); return; } nudge(); await loadExtra(); if (location.hash.startsWith('#/eslatma/')) go('#/eslatmalar'); bus.render(); return; }
   const md = Number(v.monthday);
   if (v.repeat === 'oylik' && !(md >= 1 && md <= 31)) { toast('Oy kuni 1 dan 31 gacha bo\'lishi kerak'); return; }
   const row = { title: v.title, repeat: v.repeat, at_time: v.time, for_both: !!v.for_both, is_private: !v.for_both && !!v.is_private,
@@ -324,8 +327,8 @@ export function Reminders() {
     const ackText = a ? `${r.repeat === 'yoq' ? 'Qabul qilindi' : 'Oxirgi marta qabul qilindi'}: ${fmtDateTime(a.created_at)} · ${nameOf(a.user_id, true)}` : '';
     return h('article', { class: 'card', style: 'flex-direction:row;align-items:center;gap:12px' },
       h('span', { class: 'itile ' + (a && r.repeat === 'yoq' ? 'green' : 'amber') }, icon(a && r.repeat === 'yoq' ? 'check' : 'bell', 20)),
-      h(mine ? 'button' : 'div', { type: mine ? 'button' : null, class: 'plainbtn', style: 'flex:1;min-width:0', onclick: mine ? () => reminderForm(r) : null },
-        h('b', { class: 't-title', style: `display:block;${r.active ? '' : 'color:var(--muted)'}` }, r.title),
+      h('button', { type: 'button', class: 'plainbtn', style: 'flex:1;min-width:0', onclick: () => go(`#/eslatma/${r.id}`) },
+        h('b', { class: 't-title', style: `display:block;${r.active ? '' : 'color:var(--muted)'}` }, r.title, S.remFiles[r.id] ? h('span', { class: 't-meta', style: 'font-weight:600;margin-left:6px' }, `📎 ${S.remFiles[r.id]}`) : null),
         h('span', { class: 't-meta' }, [reminderText(r), r.for_id && r.for_id !== r.owner_id ? `${nameOf(r.owner_id, true)} → ${nameOf(r.for_id, true)}` : nameOf(r.owner_id, true), r.for_both && 'ikkalamizga', r.is_private && 'shaxsiy', !r.active && 'o\'chirilgan'].filter(Boolean).join(' · ')),
         ackText && h('span', { class: 't-meta', style: 'display:block;color:var(--brand)' }, ackText)),
       a && r.repeat === 'yoq' && a.user_id === S.me.id
@@ -341,6 +344,7 @@ export function Reminders() {
   const due = dueTasks();
   return h('main', { class: 'view' },
     BackHead('Eslatmalar', '#/yana'),
+    AlarmCard(),
     due.length ? [h('div', { class: 'section' }, h('h2', {}, 'Muddati yaqin topshiriqlar'), h('span', { class: 'chip red' }, due.length)), due.map(DueTaskCard),
       h('div', { class: 't-meta' }, 'Muddatiga 3 kundan kam qolgan va muddati o\'tgan ochiq topshiriqlar. Har kuni ertalab qayta qabul qilinadi; bajarilsa yoki muddati surilsa, o\'zi chiqib ketadi.')] : null,
     pend.length ? [h('div', { class: 'section' }, h('h2', {}, 'Qabul qilinmagan'), h('span', { class: 'chip red' }, pend.length)), pend.map(PendingReminderCard)] : null,
@@ -349,6 +353,42 @@ export function Reminders() {
     h('button', { class: 'btn', type: 'button', onclick: () => reminderForm(null) }, '+ Eslatma qo\'shish'),
     h('div', { class: 't-meta' }, 'Vaqti kelgan eslatma «Qabul qildim» bosilmaguncha bosh sahifada «Sizdan javob kutmoqda» qismida turadi. Takrorlanadigan eslatma har safar alohida qabul qilinadi.'),
     done.length ? [h('div', { class: 'section' }, h('h2', {}, 'Bajarilganlar')), done.map(card)] : null);
+}
+
+/** Telefonda budilnik chalishi uchun: eski ilova bo'lsa yangilashni, ruxsat yetishmasa sozlashni taklif qiladi. */
+const PERM_TEXT = { bildirishnoma: 'bildirishnomalarga ruxsat', aniq_vaqt: '«Budilnik va eslatmalar» ruxsati', quvvat: 'quvvat tejashdan chiqarish', xiaomi: 'Xiaomi\'da «Avtoishga tushirish»' };
+function AlarmCard() {
+  if (!inApp()) return null;
+  if (appVersion() < 4) return h('section', { class: 'card' },
+    h('b', {}, 'Telefon budilnigi uchun yangi ilova kerak'),
+    h('div', { class: 't-meta' }, 'Eslatmalar telefonda vaqtida chalishi (15 daqiqa oldin, vaqtida va vaqti o\'tganda) yangi Devon ilovasida ishlaydi.'),
+    h('a', { class: 'btn', href: 'https://github.com/zufarbekshonazarov1025-lgtm/devon/releases/download/apk/Devon.apk', target: '_blank', rel: 'noopener' }, 'Yangi ilovani yuklab olish'));
+  const st = alarmStatus();
+  if (!st || st === 'ok') return null;
+  const miss = st.split(',').map((k) => PERM_TEXT[k]).filter(Boolean);
+  return h('section', { class: 'card' },
+    h('b', {}, 'Eslatma vaqtida chalishi uchun sozlash kerak'),
+    h('div', { class: 't-meta' }, 'Yetishmayapti: ' + miss.join(', ') + '. «Sozlash»ni bosing, ochilgan oynada Devon uchun ruxsat bering, so\'ng orqaga qayting. Bir nechta bo\'lsa, tugmani yana bosing.'),
+    h('button', { class: 'btn', type: 'button', onclick: () => { fixAlarms(); setTimeout(() => bus.render(), 1500); } }, 'Sozlash'));
+}
+
+/** Bitta eslatma sahifasi: tafsilot, qabul qilish tarixi, hujjatlar. */
+export function ReminderDetail(id) {
+  const r = S.reminders.find((x) => x.id === id);
+  if (!r) return h('main', { class: 'view' }, BackHead('Eslatma', '#/eslatmalar'), Empty('Eslatma topilmadi', 'U o\'chirilgan bo\'lishi mumkin.'));
+  const mine = r.owner_id === S.me.id;
+  const pend = pendingReminders().find((p) => p.r.id === r.id);
+  const acks = S.acks.filter((a) => a.reminder_id === r.id).slice(0, 10);
+  return h('main', { class: 'view' },
+    BackHead('Eslatma', '#/eslatmalar'),
+    h('section', { class: 'card' },
+      h('div', { class: 't-title' }, r.title),
+      h('div', { class: 't-meta' }, [reminderText(r), nameOf(r.owner_id, true), r.for_both && 'ikkalamizga', r.is_private && 'shaxsiy', !r.active && 'o\'chirilgan'].filter(Boolean).join(' · ')),
+      pend && h('button', { class: 'btn', type: 'button', onclick: () => ackReminder(r, pend.days) }, 'Qabul qildim'),
+      mine && h('button', { class: 'btn ghost', type: 'button', onclick: () => reminderForm(r) }, 'Tahrirlash')),
+    acks.length ? [h('div', { class: 'section' }, h('h2', {}, 'Qabul qilingan')),
+      h('section', { class: 'card' }, acks.map((a) => h('div', { class: 't-meta' }, `${fmtDate(a.occ_date)} uchun · ${fmtDateTime(a.created_at)} · ${nameOf(a.user_id, true)}`)))] : null,
+    Files({ id: r.id, reminder: true }));
 }
 
 // ---------- Takrorlanuvchi topshiriqlar ----------
@@ -459,12 +499,12 @@ export function Admin() {
   const save = async () => {
     const n = (id) => Number(el[id].value);
     err.textContent = '';
-    if (!(n('muhim') >= 0 && n('ortacha') > n('muhim'))) { err.textContent = '«O\'rtacha» chegarasi «Muhim!» chegarasidan katta bo\'lishi kerak'; return; }
+    if (!(n('muhim') >= 0)) { err.textContent = 'Shoshilinchlik chegarasi 0 dan kichik bo\'lmasligi kerak'; return; }
     for (const id of ['javob', 'savat', 'vaqtida', 'intizom']) if (!(n(id) >= 1)) { err.textContent = 'Sonlar 1 dan kichik bo\'lmasligi kerak'; return; }
     if (n('vaqtida') > 100 || n('intizom') > 100) { err.textContent = 'Foiz 100 dan oshmaydi'; return; }
     for (const id of ['reja', 'tuzish', 'hisobot', 'kunlik']) if (!el[id].value) { err.textContent = 'Vaqtlarning hammasi to\'ldirilishi kerak'; return; }
     const rows = [
-      ['muhimlik', { ...m, muhim_kun: n('muhim'), ortacha_kun: n('ortacha') }],
+      ['muhimlik', { ...m, muhim_kun: n('muhim') }],
       ['eslatma', { ...e, javob_soat: n('javob'), kunlik_eslatma_vaqti: el.kunlik.value }],
       ['hisobot', { ...hs, reja_vaqti: el.reja.value, hisobot_tuzish: el.tuzish.value, hisobot_vaqti: el.hisobot.value }],
       ['maqsad', { ...mq, vaqtida_foiz: n('vaqtida'), intizom_foiz: n('intizom') }],
@@ -486,10 +526,10 @@ export function Admin() {
   };
   return h('main', { class: 'view' },
     BackHead('Admin panel', '#/yana'),
-    h('div', { class: 'section' }, h('h2', {}, 'Muhimlik')),
+    h('div', { class: 'section' }, h('h2', {}, 'Muhimlik (Eyzenxauer matritsasi)')),
     h('section', { class: 'card' },
-      num('muhim', '«Muhim!»: muddatga necha kun qolganda', m.muhim_kun ?? 3, 0, 60),
-      num('ortacha', '«O\'rtacha»: necha kungacha (undan keyin «Muhim emas»)', m.ortacha_kun ?? 10, 1, 120)),
+      num('muhim', 'Shoshilinch: muddatga necha kun qolganda', m.muhim_kun ?? 3, 0, 60),
+      h('div', { class: 't-meta' }, 'Muhimligini topshiruvchi belgilaydi. A — muhim va shoshilinch, B — muhim, shoshilinch emas, C — shoshilinch, muhim emas, D — ikkalasi ham emas.')),
     h('div', { class: 'section' }, h('h2', {}, 'Reja va hisobot vaqtlari')),
     h('section', { class: 'card' },
       tim('reja', 'Kunlik reja ko\'rinadigan vaqt', hs.reja_vaqti || '07:30'),

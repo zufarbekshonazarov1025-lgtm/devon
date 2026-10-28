@@ -41,7 +41,8 @@ export function needsMe() {
     (t.status === 'tekshiruvda' && t.creator_id === me && t.assignee_id !== me) ||
     (isOpen(t) && t.assignee_id === me && t.creator_id !== me && !t.accepted_at));
 }
-const byDue = (a, b) => a.due_date.localeCompare(b.due_date) || a.seq - b.seq;
+const qOrd = (t) => (priority(t) || { order: 9 }).order;
+const byDue = (a, b) => qOrd(a) - qOrd(b) || a.due_date.localeCompare(b.due_date) || a.seq - b.seq;
 
 // ---------- Kirish ----------
 export function Login() {
@@ -98,7 +99,7 @@ export function Home() {
 
   const tiles = me.kind === 'rahbar'
     ? [[S.tasks.length, 'Jami', '', 'all', 'all'], [done.length, 'Bajarildi', 'c-brand', 'done', 'all'], [open.length, 'Ochiq', '', 'open', 'all'], [pct, 'Vaqtida', 'c-brand', 'ontime', 'all']]
-    : [[mine.length, 'Ochiq', '', 'open', 'me'], [mine.filter((t) => priority(t)?.key === 'muhim').length, 'Muhim!', 'c-red', 'muhim', 'me'],
+    : [[mine.length, 'Ochiq', '', 'open', 'me'], [mine.filter((t) => priority(t)?.key === 'A').length, 'A · Hozir', 'c-red', 'A', 'me'],
        [S.tasks.filter((t) => t.status === 'tekshiruvda' && t.assignee_id === me.id).length, 'Javob kutadi', 'c-amber', 'review', 'me'], [pct, 'Vaqtida', 'c-brand', 'ontime', 'me']];
 
   // Shu kunga tegishli hamma ish bajarilgan bo'lsa
@@ -194,7 +195,10 @@ const VIEWS = {
   done: { title: 'Bajarildi', sub: 'Bajarilgan topshiriqlar', test: (t) => t.status === 'bajarildi' },
   ontime: { title: 'Vaqtida', sub: 'Vaqtida bajarilganlar', test: (t) => t.status === 'bajarildi' && onTime(t) === true },
   late: { title: 'Kechikib', sub: 'Kechikib bajarilganlar', test: (t) => t.status === 'bajarildi' && onTime(t) === false },
-  muhim: { title: 'Muhim!', sub: 'Muddati 3 kungacha yoki o\'tgan', test: (t) => priority(t)?.key === 'muhim' },
+  A: { title: 'A · Hozir bajar', sub: 'Muhim va shoshilinch', test: (t) => priority(t)?.key === 'A' },
+  B: { title: 'B · Rejalashtir', sub: 'Muhim, shoshilinch emas', test: (t) => priority(t)?.key === 'B' },
+  C: { title: 'C · Topshir / tez yop', sub: 'Shoshilinch, muhim emas', test: (t) => priority(t)?.key === 'C' },
+  D: { title: 'D · Keyinga', sub: 'Muhim ham, shoshilinch ham emas', test: (t) => priority(t)?.key === 'D' },
   review: { title: 'Tekshiruvda', sub: 'Javob kutayotganlar', test: (t) => t.status === 'tekshiruvda' },
   closed: { title: 'Tarix', sub: 'Yopilgan topshiriqlar', test: (t) => !isOpen(t) },
 };
@@ -222,7 +226,7 @@ export function Tasks() {
       chip('who', 'all', 'Hammasi'), chip('who', 'me', 'Menga'), ot && chip('who', 'ot', nameOf(ot.id, true) + 'ga'), chip('who', 'wait', 'Kutilmoqda'),
       h('span', { 'aria-hidden': 'true', style: 'flex:none;width:1px;background:var(--line);margin:8px 2px' }),
       chip('show', 'open', 'Ochiq'), chip('show', 'all', 'Jami'), chip('show', 'done', 'Bajarildi'), chip('show', 'ontime', 'Vaqtida'),
-      chip('show', 'late', 'Kechikib'), chip('show', 'muhim', 'Muhim!'), chip('show', 'review', 'Tekshiruvda'), chip('show', 'closed', 'Tarix')),
+      chip('show', 'late', 'Kechikib'), chip('show', 'A', 'A'), chip('show', 'B', 'B'), chip('show', 'C', 'C'), chip('show', 'D', 'D'), chip('show', 'review', 'Tekshiruvda'), chip('show', 'closed', 'Tarix')),
     rows.length ? (wide() ? TaskTable(rows) : rows.map(TaskCard)) : Empty(q ? 'Hech narsa topilmadi' : 'Ro\'yxat bo\'sh', q ? 'Boshqa so\'z bilan urinib ko\'ring.' : 'Bu bo\'limda topshiriq yo\'q.'));
 }
 
@@ -230,7 +234,7 @@ export function Tasks() {
 function TaskTable(rows) {
   const waitName = (t) => isOpen(t) && t.waiting_on && (S.contacts.find((c) => c.id === t.waiting_on) || {}).name;
   return h('div', { class: 'tablewrap' }, h('table', { class: 'ttable' },
-    h('thead', {}, h('tr', {}, ['№', 'Topshiriq', 'Kimdan → kimga', 'Holat', 'Muhimlik', 'Muddat'].map((x) => h('th', { scope: 'col' }, x)))),
+    h('thead', {}, h('tr', {}, ['№', 'Topshiriq', 'Kimdan → kimga', 'Holat', 'Guruh', 'Muddat'].map((x) => h('th', { scope: 'col' }, x)))),
     h('tbody', {}, rows.map((t) => {
       const pr = priority(t), du = dueChip(t), w = waitName(t), ot = !isOpen(t) && t.status === 'bajarildi' ? onTime(t) : null;
       return h('tr', { onclick: (e) => { if (!e.target.closest('a')) go(`#/ish/${t.id}`); } },
@@ -250,6 +254,7 @@ export function TaskForm(id) {
   const t = id ? S.tasks.find((x) => x.id === id) : null;
   if (id && !t) return h('main', { class: 'view' }, BackHead('Topilmadi'), Empty('Topshiriq topilmadi', ''));
   const v = t || { assignee_id: S.me.kind === 'rahbar' && other() ? other().id : S.me.id, due_date: '' };
+  const impDefault = t ? t.important !== false : S.me.kind === 'rahbar';
   const f = {
     title: h('input', { class: 'input', id: 'f_title', value: v.title || '', maxlength: 300, required: true }),
     assignee: h('select', { class: 'input', id: 'f_assignee' }, S.profiles.map((p) => h('option', { value: p.id, selected: p.id === v.assignee_id }, p.short_name))),
@@ -261,6 +266,8 @@ export function TaskForm(id) {
         .map(([n, l]) => h('option', { value: n, selected: v.level === n }, l))),
     wait: h('input', { class: 'input', id: 'f_wait', list: 'contacts', value: (S.contacts.find((c) => c.id === v.waiting_on) || {}).name || '', placeholder: 'Ism' }),
     priv: h('input', { type: 'checkbox', id: 'f_priv', checked: !!v.is_private }),
+    imp: h('select', { class: 'input', id: 'f_imp' },
+      h('option', { value: '1', selected: impDefault }, 'Muhim'), h('option', { value: '0', selected: !impDefault }, 'Muhim emas')),
   };
   const err = h('div', { class: 'err' });
   const btn = h('button', { class: 'btn', type: 'submit' }, t ? 'Saqlash' : 'Topshiriq yaratish');
@@ -280,7 +287,7 @@ export function TaskForm(id) {
         else { const { data, error } = await sb.from('contacts').insert({ name: wname, created_by: S.me.id }).select().single(); if (!error) { waiting_on = data.id; S.contacts.push(data); } }
       }
       const row = { title, assignee_id: f.assignee.value, due_date: f.due.value, description: f.desc.value.trim() || null, purpose: f.purpose.value.trim() || null,
-        level: f.level.value ? Number(f.level.value) : null, waiting_on, is_private: f.priv.checked };
+        level: f.level.value ? Number(f.level.value) : null, waiting_on, is_private: f.priv.checked, important: f.imp.value === '1' };
       let res;
       if (t) res = await sb.from('tasks').update(row).eq('id', t.id).select().single();
       else {
@@ -296,6 +303,7 @@ export function TaskForm(id) {
       fld('Nima ish', f.title, true),
       fld('Kim bajaradi', f.assignee, true),
       fld('Qachongacha', f.due, true),
+      fld('Muhimligi (shoshilinchlik muddatdan o\'zi chiqadi)', f.imp),
       fld('Izoh', f.desc),
       fld('Nima uchun (maqsad)', f.purpose),
       fld('Vakolat darajasi', f.level),

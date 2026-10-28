@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
 
   const [planQ, tasksQ, evQ, remQ, recQ, setQ, ackQ, dueAckQ] = await Promise.all([
     admin.from("plan_items").select("id,title,at_time,done,owner_id,for_id,is_private,sort,created_at").eq("owner_id", owner.id).eq("plan_date", date),
-    admin.from("tasks").select("id,seq,title,due_date,status,assignee_id,creator_id,is_private").is("deleted_at", null).not("status", "in", "(bajarildi,bekor)").order("due_date").limit(200),
+    admin.from("tasks").select("id,seq,title,due_date,status,assignee_id,creator_id,is_private,important").is("deleted_at", null).not("status", "in", "(bajarildi,bekor)").order("due_date").limit(200),
     admin.from("events").select("id,title,owner_id,created_by,starts_at,all_day,repeat,is_private"),
     admin.from("reminders").select("id,title,owner_id,for_id,repeat,remind_at,at_time,weekday,monthday,for_both,active,is_private,created_at").eq("active", true),
     admin.from("recurrences").select("id,next_run,active,is_private,creator_id,assignee_id").eq("active", true),
@@ -123,14 +123,18 @@ Deno.serve(async (req) => {
     .sort((a, b) => String(a.at_time ?? "99").localeCompare(String(b.at_time ?? "99")) || Number(a.sort ?? 0) - Number(b.sort ?? 0) || String(a.created_at).localeCompare(String(b.created_at)))
     .map((i) => ({ id: i.id, title: i.title, time: String(i.at_time ?? "").slice(0, 5), done: !!i.done, who: (i.for_id ?? i.owner_id) === uid ? "" : first(i.for_id ?? i.owner_id), mine: (i.for_id ?? i.owner_id) === uid || i.owner_id === uid }));
 
-  const lim = (setQ.data?.value ?? {}) as Row, muhimKun = Number(lim.muhim_kun ?? 3), ortaKun = Number(lim.ortacha_kun ?? 10);
+  const lim = (setQ.data?.value ?? {}) as Row, muhimKun = Number(lim.muhim_kun ?? 3);
   const openTasks = (tasksQ.data ?? []).filter((t) => !t.is_private || t.assignee_id === uid || t.creator_id === uid);
+  // Eyzenxauer matritsasi: muhimlikni topshiruvchi belgilaydi, shoshilinchlik muddatdan chiqadi
+  const C_LABEL = me.kind === "rahbar" ? "C · Topshir" : "C · Tez yop";
   const tasks = openTasks.map((t) => {
     const left = Math.round((dayMs(t.due_date) - dayMs(date)) / 86400000);
+    const imp = t.important !== false, urg = left <= muhimKun;
+    const q = imp ? (urg ? 0 : 1) : (urg ? 2 : 3);
     return { id: t.id, seq: t.seq, title: t.title, due: t.due_date, status: t.status, who: t.assignee_id === uid ? "" : first(t.assignee_id),
-      pri: left <= muhimKun ? "Muhim!" : left <= ortaKun ? "O'rtacha" : "Muhim emas", lvl: left <= muhimKun ? 2 : left <= ortaKun ? 1 : 0,
+      pri: ["A · Hozir bajar", "B · Rejalashtir", C_LABEL, "D · Keyinga"][q], lvl: [2, 1, 1, 0][q], q,
       left: left < 0 ? `Kechikdi · ${-left} kun` : left === 0 ? "Bugun" : left === 1 ? "Ertaga" : `${left} kun qoldi` };
-  });
+  }).sort((a, b) => a.q - b.q || String(a.due).localeCompare(String(b.due)));
 
   const events = (evQ.data ?? []).filter((e) => !e.is_private || e.owner_id === uid || e.created_by === uid);
   // Menga tegishli eslatmalar: o'zimga qo'yganim, menga qo'yilgani yoki ikkalamizga
