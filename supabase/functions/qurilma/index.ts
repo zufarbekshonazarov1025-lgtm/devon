@@ -1,7 +1,6 @@
 // Devon: telefon (qurilma) uchun. Ilova yopiq turganda ham bildirishnoma, vidjet va eslatma budilniklari ma'lumotini beradi.
 // Qurilma o'z kaliti bilan tanitiladi; kalitning faqat izi (SHA-256) bazada saqlanadi. Admin qurilmani uzib qo'yishi mumkin.
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const out = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
