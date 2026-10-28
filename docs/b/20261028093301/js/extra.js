@@ -499,12 +499,10 @@ export function Admin() {
   const save = async () => {
     const n = (id) => Number(el[id].value);
     err.textContent = '';
-    if (!(n('muhim') >= 0 && n('ortacha') > n('muhim'))) { err.textContent = '«O\'rtacha» chegarasi «Muhim!» chegarasidan katta bo\'lishi kerak'; return; }
     for (const id of ['javob', 'savat', 'vaqtida', 'intizom']) if (!(n(id) >= 1)) { err.textContent = 'Sonlar 1 dan kichik bo\'lmasligi kerak'; return; }
     if (n('vaqtida') > 100 || n('intizom') > 100) { err.textContent = 'Foiz 100 dan oshmaydi'; return; }
     for (const id of ['reja', 'tuzish', 'hisobot', 'kunlik']) if (!el[id].value) { err.textContent = 'Vaqtlarning hammasi to\'ldirilishi kerak'; return; }
     const rows = [
-      ['muhimlik', { ...m, muhim_kun: n('muhim'), ortacha_kun: n('ortacha') }],
       ['eslatma', { ...e, javob_soat: n('javob'), kunlik_eslatma_vaqti: el.kunlik.value }],
       ['hisobot', { ...hs, reja_vaqti: el.reja.value, hisobot_tuzish: el.tuzish.value, hisobot_vaqti: el.hisobot.value }],
       ['maqsad', { ...mq, vaqtida_foiz: n('vaqtida'), intizom_foiz: n('intizom') }],
@@ -526,10 +524,7 @@ export function Admin() {
   };
   return h('main', { class: 'view' },
     BackHead('Admin panel', '#/yana'),
-    h('div', { class: 'section' }, h('h2', {}, 'Muhimlik')),
-    h('section', { class: 'card' },
-      num('muhim', '«Muhim!»: muddatga necha kun qolganda', m.muhim_kun ?? 3, 0, 60),
-      num('ortacha', '«O\'rtacha»: necha kungacha (undan keyin «Muhim emas»)', m.ortacha_kun ?? 10, 1, 120)),
+
     h('div', { class: 'section' }, h('h2', {}, 'Reja va hisobot vaqtlari')),
     h('section', { class: 'card' },
       tim('reja', 'Kunlik reja ko\'rinadigan vaqt', hs.reja_vaqti || '07:30'),

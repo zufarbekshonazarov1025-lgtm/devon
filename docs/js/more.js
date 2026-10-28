@@ -283,9 +283,9 @@ export function buildXlsx(sheets) {
 }
 export function exportSheets() {
   const c = (id) => (S.contacts.find((x) => x.id === id) || {}).name || '';
-  const tasks = [['№', 'Topshiriq', 'Izoh', 'Topshiruvchi', 'Mas\'ul', 'Holati', 'Muddat', 'Asl muddat', 'Ko\'chirilgan (marta)', 'Yaratilgan', 'Qabul qilingan', 'Bajarilgan', 'Vaqtida', 'Natija', 'Kimdan kutilmoqda', 'Vakolat darajasi', 'Qaytarilgan (marta)', 'Muhimligi', 'Guruh'],
+  const tasks = [['№', 'Topshiriq', 'Izoh', 'Topshiruvchi', 'Mas\'ul', 'Holati', 'Muddat', 'Asl muddat', 'Ko\'chirilgan (marta)', 'Yaratilgan', 'Qabul qilingan', 'Bajarilgan', 'Vaqtida', 'Natija', 'Kimdan kutilmoqda', 'Vakolat darajasi', 'Qaytarilgan (marta)', 'Guruh'],
     ...[...S.tasks].sort((a, b) => a.seq - b.seq).map((t) => [t.seq, t.title, t.description || '', nameOf(t.creator_id), nameOf(t.assignee_id), STATUS[t.status], fmtDate(t.due_date), t.original_due_date ? fmtDate(t.original_due_date) : '', t.reschedule_count || 0,
-      fmtDate(dayOf(t.created_at)), t.accepted_at ? fmtDate(dayOf(t.accepted_at)) : '', t.submitted_at ? fmtDate(dayOf(t.submitted_at)) : '', t.status === 'bajarildi' && onTime(t) !== null ? (onTime(t) ? 'Ha' : 'Yo\'q') : '', t.result || '', c(t.waiting_on), t.level || '', t.returned_count || 0, t.important === false ? 'Muhim emas' : 'Muhim', (priority(t) || {}).label || ''])];
+      fmtDate(dayOf(t.created_at)), t.accepted_at ? fmtDate(dayOf(t.accepted_at)) : '', t.submitted_at ? fmtDate(dayOf(t.submitted_at)) : '', t.status === 'bajarildi' && onTime(t) !== null ? (onTime(t) ? 'Ha' : 'Yo\'q') : '', t.result || '', c(t.waiting_on), t.level || '', t.returned_count || 0, (priority(t) || {}).label || ''])];
   const plan = [['Sana', 'Vaqt', 'Band', 'Kimniki', 'Bajarildi', 'Tasdiqdan keyin qo\'shilgan'],
     ...[...S.plan].sort((a, b) => a.plan_date.localeCompare(b.plan_date) || (a.at_time || '99').localeCompare(b.at_time || '99')).map((i) => [fmtDate(i.plan_date), (i.at_time || '').slice(0, 5), i.title, nameOf(forOf(i)), i.done ? 'Ha' : 'Yo\'q', i.added_after_approval ? 'Ha' : ''])];
   const DOC = { reja: 'Reja', hisobot: 'Hisobot' }, PER = { kunlik: 'Kunlik', haftalik: 'Haftalik', oylik: 'Oylik' }, ST = { qoralama: 'Yuborilmagan', yuborildi: 'Tasdiq kutilmoqda', tasdiqlandi: 'Tasdiqlandi', qaytarildi: 'Qaytarildi' };

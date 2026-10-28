@@ -56,9 +56,15 @@ a.card { color: var(--ink); }
 .chip.red { color: var(--red); background: var(--red-tint); }
 .chip.amber { color: var(--amber); background: var(--amber-tint); }
 .chip.blue { color: var(--blue); background: var(--blue-tint); }
+.quadpick { display: flex; flex-wrap: wrap; gap: 6px; }
+.quadpick .chip { border: 1px solid transparent; cursor: pointer; min-height: 32px; font: inherit; font-size: 12px; font-weight: 600; }
+.quadpick .chip.on { border-color: currentColor; font-weight: 800; }
 .chip.grey { color: var(--grey-ink); background: var(--grey-tint); font-weight: 600; }
 .chip.green { color: var(--brand-dark); background: var(--brand-tint); }
 .chip.blue { color: var(--blue); background: var(--blue-tint); }
+.quadpick { display: flex; flex-wrap: wrap; gap: 6px; }
+.quadpick .chip { border: 1px solid transparent; cursor: pointer; min-height: 32px; font: inherit; font-size: 12px; font-weight: 600; }
+.quadpick .chip.on { border-color: currentColor; font-weight: 800; }
 .between { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .t-title { font-size: 15px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
 .t-meta { font-size: 12px; color: var(--muted); }

@@ -118,13 +118,17 @@ export function greeting() { const hr = new Date().getHours(); return hr < 11 ? 
 export const STATUS = { yangi: 'Yangi', jarayonda: 'Jarayonda', kutilmoqda: 'Kutilmoqda', tekshiruvda: 'Tekshiruvda', bajarildi: 'Bajarildi', bekor: 'Bekor qilindi' };
 export const isOpen = (t) => !['bajarildi', 'bekor'].includes(t.status);
 
+/** Eyzenxauer matritsasi: guruhni topshiriqqa qarab odamning o'zi belgilaydi (hech narsa avtomatik hisoblanmaydi). */
+export const QUAD = {
+  1: { key: 1, label: 'Muhim va shoshilinch', cls: 'red', order: 0 },
+  2: { key: 2, label: 'Muhim, shoshilinch emas', cls: 'blue', order: 1 },
+  3: { key: 3, label: 'Shoshilinch, muhim emas', cls: 'amber', order: 2 },
+  4: { key: 4, label: 'Muhim ham, shoshilinch ham emas', cls: 'grey', order: 3 },
+};
+export const UNMARKED = { key: 0, label: 'Belgilanmagan', cls: 'grey', order: 4 };
 export function priority(t) {
   if (!isOpen(t)) return null;
-  const m = S.settings.muhimlik || { muhim_kun: 3, ortacha_kun: 10 };
-  const d = daysLeft(t.due_date);
-  if (d <= m.muhim_kun) return { key: 'muhim', label: 'Muhim!', cls: 'red' };
-  if (d <= m.ortacha_kun) return { key: 'ortacha', label: 'O\'rtacha', cls: 'amber' };
-  return { key: 'emas', label: 'Muhim emas', cls: 'grey' };
+  return QUAD[t.quadrant] || UNMARKED;
 }
 export function dueChip(t) {
   if (!isOpen(t)) return null;
