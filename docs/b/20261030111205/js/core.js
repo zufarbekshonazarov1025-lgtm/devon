@@ -118,20 +118,17 @@ export function greeting() { const hr = new Date().getHours(); return hr < 11 ? 
 export const STATUS = { yangi: 'Yangi', jarayonda: 'Jarayonda', kutilmoqda: 'Kutilmoqda', tekshiruvda: 'Tekshiruvda', bajarildi: 'Bajarildi', bekor: 'Bekor qilindi' };
 export const isOpen = (t) => !['bajarildi', 'bekor'].includes(t.status);
 
-/** Eyzenxauer matritsasi: muhimlikni topshiruvchi belgilaydi, shoshilinchlik muddatdan chiqadi. */
+/** Eyzenxauer matritsasi: guruhni topshiriqqa qarab odamning o'zi belgilaydi (hech narsa avtomatik hisoblanmaydi). */
 export const QUAD = {
-  A: { key: 'A', label: 'A · Hozir bajar', short: 'Hozir bajar', cls: 'red', order: 0 },
-  B: { key: 'B', label: 'B · Rejalashtir', short: 'Rejalashtir', cls: 'blue', order: 1 },
-  C: { key: 'C', label: 'C · Tez yop', short: 'Tez yop', cls: 'amber', order: 2 },
-  D: { key: 'D', label: 'D · Keyinga', short: 'Keyinga', cls: 'grey', order: 3 },
+  1: { key: 1, label: 'Muhim va shoshilinch', cls: 'red', order: 0 },
+  2: { key: 2, label: 'Muhim, shoshilinch emas', cls: 'blue', order: 1 },
+  3: { key: 3, label: 'Shoshilinch, muhim emas', cls: 'amber', order: 2 },
+  4: { key: 4, label: 'Muhim ham, shoshilinch ham emas', cls: 'grey', order: 3 },
 };
-export const isUrgent = (t) => daysLeft(t.due_date) <= ((S.settings.muhimlik || {}).muhim_kun ?? 3);
+export const UNMARKED = { key: 0, label: 'Belgilanmagan', cls: 'grey', order: 4 };
 export function priority(t) {
   if (!isOpen(t)) return null;
-  const imp = t.important !== false, urg = isUrgent(t);
-  const q = QUAD[imp ? (urg ? 'A' : 'B') : (urg ? 'C' : 'D')];
-  // Rahbar uchun C — «boshqaga topshir»
-  return q.key === 'C' && S.me && S.me.kind === 'rahbar' ? { ...q, label: 'C · Topshir', short: 'Topshir' } : q;
+  return QUAD[t.quadrant] || UNMARKED;
 }
 export function dueChip(t) {
   if (!isOpen(t)) return null;

@@ -179,6 +179,17 @@ async function acceptResult(t) {
   if (await updateTask(t.id, { status: 'bajarildi', closed_at: new Date().toISOString() }, 'Qabul qilindi, tarixga o\'tdi'))
     notify(t.assignee_id, 'qabul', 'Ishingiz qabul qilindi', t.title, t.id);
 }
+async function closeByLead(t) {
+  const result = await ask({ title: 'Bajarildi deb yopish', label: 'Natija (ixtiyoriy)', value: t.result || '', required: false, ok: 'Yopish' });
+  if (result == null) return;
+  const now = new Date().toISOString();
+  const patch = { status: 'bajarildi', closed_at: now, submitted_at: t.submitted_at || now, accepted_at: t.accepted_at || now };
+  if (result.trim()) patch.result = result.trim();
+  if (await updateTask(t.id, patch, 'Rahbar bajarildi deb yopdi')) {
+    celebrate('done');
+    notify(t.assignee_id, 'qabul', 'Topshiriq bajarildi deb yopildi', t.title, t.id);
+  }
+}
 async function returnTask(t) {
   const reason = await ask({ title: 'Qaytarish sababi', label: 'Nimani tuzatish kerak', ok: 'Qaytarish' });
   if (reason == null) return;
@@ -329,6 +340,8 @@ export function TaskDetail(id) {
   if (mineToDo && t.status === 'kutilmoqda') actions.push(h('button', { class: 'btn ghost', onclick: () => setWaiting(t) }, 'Kimdan kutilayotganini o\'zgartirish'));
   if (mineToDo && ['yangi', 'jarayonda', 'kutilmoqda'].includes(t.status)) actions.push(h('button', { class: 'btn', onclick: () => submitTask(t) }, 'Bajarildi'));
   if (t.status === 'tekshiruvda' && iGave && !mineToDo) actions.push(h('button', { class: 'btn', onclick: () => acceptResult(t) }, 'Qabul qilish'), h('button', { class: 'btn ghost', onclick: () => returnTask(t) }, 'Qaytarish'));
+  // Rahbar yordamchining istalgan ochiq topshirig'ini (o'zi bermagan bo'lsa ham) bajarildi deb yopa oladi.
+  if (S.me.kind === 'rahbar' && isOpen(t) && !mineToDo && !(t.status === 'tekshiruvda' && iGave)) actions.push(h('button', { class: 'btn', onclick: () => closeByLead(t) }, 'Bajarildi deb yopish'));
 
   const manage = [];
   if (isOpen(t) && mineToDo && !iGave) manage.push(h('button', { class: 'btn ghost small', onclick: () => askReschedule(t) }, 'Muddatni ko\'chirish'));

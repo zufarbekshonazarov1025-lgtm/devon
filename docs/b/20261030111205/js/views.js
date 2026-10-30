@@ -1,5 +1,5 @@
 import { sb, S, bus, h, icon, toast, ask, confirmBox, today, fmtDate, fmtDateTime, dayOf, daysLeft, longToday, greeting,
-  celebrate, STATUS, isOpen, priority, dueChip, onTime, onTimeStats, nameOf, other, profile, loadTasks, updateTask, notify, go, Head, BackHead, Empty, owner, wide } from './core.js';
+  celebrate, STATUS, isOpen, priority, QUAD, dueChip, onTime, onTimeStats, nameOf, other, profile, loadTasks, updateTask, notify, go, Head, BackHead, Empty, owner, wide } from './core.js';
 import { Files } from './files.js';
 import { unregisterDevice } from './native.js';
 import { Bell, HomeKudos, StreakChip, KudosBlock, downloadExcel } from './more.js';
@@ -99,7 +99,7 @@ export function Home() {
 
   const tiles = me.kind === 'rahbar'
     ? [[S.tasks.length, 'Jami', '', 'all', 'all'], [done.length, 'Bajarildi', 'c-brand', 'done', 'all'], [open.length, 'Ochiq', '', 'open', 'all'], [pct, 'Vaqtida', 'c-brand', 'ontime', 'all']]
-    : [[mine.length, 'Ochiq', '', 'open', 'me'], [mine.filter((t) => priority(t)?.key === 'A').length, 'A · Hozir', 'c-red', 'A', 'me'],
+    : [[mine.length, 'Ochiq', '', 'open', 'me'], [mine.filter((t) => priority(t)?.key === 1).length, 'Muhim va shoshilinch', 'c-red', 'q1', 'me'],
        [S.tasks.filter((t) => t.status === 'tekshiruvda' && t.assignee_id === me.id).length, 'Javob kutadi', 'c-amber', 'review', 'me'], [pct, 'Vaqtida', 'c-brand', 'ontime', 'me']];
 
   // Shu kunga tegishli hamma ish bajarilgan bo'lsa
@@ -179,6 +179,17 @@ async function acceptResult(t) {
   if (await updateTask(t.id, { status: 'bajarildi', closed_at: new Date().toISOString() }, 'Qabul qilindi, tarixga o\'tdi'))
     notify(t.assignee_id, 'qabul', 'Ishingiz qabul qilindi', t.title, t.id);
 }
+async function closeByLead(t) {
+  const result = await ask({ title: 'Bajarildi deb yopish', label: 'Natija (ixtiyoriy)', value: t.result || '', required: false, ok: 'Yopish' });
+  if (result == null) return;
+  const now = new Date().toISOString();
+  const patch = { status: 'bajarildi', closed_at: now, submitted_at: t.submitted_at || now, accepted_at: t.accepted_at || now };
+  if (result.trim()) patch.result = result.trim();
+  if (await updateTask(t.id, patch, 'Rahbar bajarildi deb yopdi')) {
+    celebrate('done');
+    notify(t.assignee_id, 'qabul', 'Topshiriq bajarildi deb yopildi', t.title, t.id);
+  }
+}
 async function returnTask(t) {
   const reason = await ask({ title: 'Qaytarish sababi', label: 'Nimani tuzatish kerak', ok: 'Qaytarish' });
   if (reason == null) return;
@@ -195,10 +206,11 @@ const VIEWS = {
   done: { title: 'Bajarildi', sub: 'Bajarilgan topshiriqlar', test: (t) => t.status === 'bajarildi' },
   ontime: { title: 'Vaqtida', sub: 'Vaqtida bajarilganlar', test: (t) => t.status === 'bajarildi' && onTime(t) === true },
   late: { title: 'Kechikib', sub: 'Kechikib bajarilganlar', test: (t) => t.status === 'bajarildi' && onTime(t) === false },
-  A: { title: 'A · Hozir bajar', sub: 'Muhim va shoshilinch', test: (t) => priority(t)?.key === 'A' },
-  B: { title: 'B · Rejalashtir', sub: 'Muhim, shoshilinch emas', test: (t) => priority(t)?.key === 'B' },
-  C: { title: 'C · Topshir / tez yop', sub: 'Shoshilinch, muhim emas', test: (t) => priority(t)?.key === 'C' },
-  D: { title: 'D · Keyinga', sub: 'Muhim ham, shoshilinch ham emas', test: (t) => priority(t)?.key === 'D' },
+  q1: { title: 'Muhim va shoshilinch', sub: 'Eyzenxauer matritsasi', test: (t) => priority(t)?.key === 1 },
+  q2: { title: 'Muhim, shoshilinch emas', sub: 'Eyzenxauer matritsasi', test: (t) => priority(t)?.key === 2 },
+  q3: { title: 'Shoshilinch, muhim emas', sub: 'Eyzenxauer matritsasi', test: (t) => priority(t)?.key === 3 },
+  q4: { title: 'Muhim ham, shoshilinch ham emas', sub: 'Eyzenxauer matritsasi', test: (t) => priority(t)?.key === 4 },
+  q0: { title: 'Belgilanmagan', sub: 'Guruhi tanlanmagan ochiq topshiriqlar', test: (t) => priority(t)?.key === 0 },
   review: { title: 'Tekshiruvda', sub: 'Javob kutayotganlar', test: (t) => t.status === 'tekshiruvda' },
   closed: { title: 'Tarix', sub: 'Yopilgan topshiriqlar', test: (t) => !isOpen(t) },
 };
@@ -226,7 +238,7 @@ export function Tasks() {
       chip('who', 'all', 'Hammasi'), chip('who', 'me', 'Menga'), ot && chip('who', 'ot', nameOf(ot.id, true) + 'ga'), chip('who', 'wait', 'Kutilmoqda'),
       h('span', { 'aria-hidden': 'true', style: 'flex:none;width:1px;background:var(--line);margin:8px 2px' }),
       chip('show', 'open', 'Ochiq'), chip('show', 'all', 'Jami'), chip('show', 'done', 'Bajarildi'), chip('show', 'ontime', 'Vaqtida'),
-      chip('show', 'late', 'Kechikib'), chip('show', 'A', 'A'), chip('show', 'B', 'B'), chip('show', 'C', 'C'), chip('show', 'D', 'D'), chip('show', 'review', 'Tekshiruvda'), chip('show', 'closed', 'Tarix')),
+      chip('show', 'late', 'Kechikib'), chip('show', 'q1', 'Muhim va shoshilinch'), chip('show', 'q2', 'Muhim, shoshilinch emas'), chip('show', 'q3', 'Shoshilinch, muhim emas'), chip('show', 'q4', 'Muhim ham, shoshilinch ham emas'), chip('show', 'q0', 'Belgilanmagan'), chip('show', 'review', 'Tekshiruvda'), chip('show', 'closed', 'Tarix')),
     rows.length ? (wide() ? TaskTable(rows) : rows.map(TaskCard)) : Empty(q ? 'Hech narsa topilmadi' : 'Ro\'yxat bo\'sh', q ? 'Boshqa so\'z bilan urinib ko\'ring.' : 'Bu bo\'limda topshiriq yo\'q.'));
 }
 
@@ -254,7 +266,6 @@ export function TaskForm(id) {
   const t = id ? S.tasks.find((x) => x.id === id) : null;
   if (id && !t) return h('main', { class: 'view' }, BackHead('Topilmadi'), Empty('Topshiriq topilmadi', ''));
   const v = t || { assignee_id: S.me.kind === 'rahbar' && other() ? other().id : S.me.id, due_date: '' };
-  const impDefault = t ? t.important !== false : S.me.kind === 'rahbar';
   const f = {
     title: h('input', { class: 'input', id: 'f_title', value: v.title || '', maxlength: 300, required: true }),
     assignee: h('select', { class: 'input', id: 'f_assignee' }, S.profiles.map((p) => h('option', { value: p.id, selected: p.id === v.assignee_id }, p.short_name))),
@@ -266,8 +277,8 @@ export function TaskForm(id) {
         .map(([n, l]) => h('option', { value: n, selected: v.level === n }, l))),
     wait: h('input', { class: 'input', id: 'f_wait', list: 'contacts', value: (S.contacts.find((c) => c.id === v.waiting_on) || {}).name || '', placeholder: 'Ism' }),
     priv: h('input', { type: 'checkbox', id: 'f_priv', checked: !!v.is_private }),
-    imp: h('select', { class: 'input', id: 'f_imp' },
-      h('option', { value: '1', selected: impDefault }, 'Muhim'), h('option', { value: '0', selected: !impDefault }, 'Muhim emas')),
+    quad: h('select', { class: 'input', id: 'f_quad' }, h('option', { value: '' }, 'Belgilanmagan'),
+      [1, 2, 3, 4].map((n) => h('option', { value: n, selected: v.quadrant === n }, QUAD[n].label))),
   };
   const err = h('div', { class: 'err' });
   const btn = h('button', { class: 'btn', type: 'submit' }, t ? 'Saqlash' : 'Topshiriq yaratish');
@@ -287,7 +298,7 @@ export function TaskForm(id) {
         else { const { data, error } = await sb.from('contacts').insert({ name: wname, created_by: S.me.id }).select().single(); if (!error) { waiting_on = data.id; S.contacts.push(data); } }
       }
       const row = { title, assignee_id: f.assignee.value, due_date: f.due.value, description: f.desc.value.trim() || null, purpose: f.purpose.value.trim() || null,
-        level: f.level.value ? Number(f.level.value) : null, waiting_on, is_private: f.priv.checked, important: f.imp.value === '1' };
+        level: f.level.value ? Number(f.level.value) : null, waiting_on, is_private: f.priv.checked, quadrant: f.quad.value ? Number(f.quad.value) : null };
       let res;
       if (t) res = await sb.from('tasks').update(row).eq('id', t.id).select().single();
       else {
@@ -303,7 +314,7 @@ export function TaskForm(id) {
       fld('Nima ish', f.title, true),
       fld('Kim bajaradi', f.assignee, true),
       fld('Qachongacha', f.due, true),
-      fld('Muhimligi (shoshilinchlik muddatdan o\'zi chiqadi)', f.imp),
+      fld('Guruh (Eyzenxauer matritsasi)', f.quad),
       fld('Izoh', f.desc),
       fld('Nima uchun (maqsad)', f.purpose),
       fld('Vakolat darajasi', f.level),
@@ -329,6 +340,8 @@ export function TaskDetail(id) {
   if (mineToDo && t.status === 'kutilmoqda') actions.push(h('button', { class: 'btn ghost', onclick: () => setWaiting(t) }, 'Kimdan kutilayotganini o\'zgartirish'));
   if (mineToDo && ['yangi', 'jarayonda', 'kutilmoqda'].includes(t.status)) actions.push(h('button', { class: 'btn', onclick: () => submitTask(t) }, 'Bajarildi'));
   if (t.status === 'tekshiruvda' && iGave && !mineToDo) actions.push(h('button', { class: 'btn', onclick: () => acceptResult(t) }, 'Qabul qilish'), h('button', { class: 'btn ghost', onclick: () => returnTask(t) }, 'Qaytarish'));
+  // Rahbar yordamchining istalgan ochiq topshirig'ini (o'zi bermagan bo'lsa ham) bajarildi deb yopa oladi.
+  if (S.me.kind === 'rahbar' && isOpen(t) && !mineToDo && !(t.status === 'tekshiruvda' && iGave)) actions.push(h('button', { class: 'btn', onclick: () => closeByLead(t) }, 'Bajarildi deb yopish'));
 
   const manage = [];
   if (isOpen(t) && mineToDo && !iGave) manage.push(h('button', { class: 'btn ghost small', onclick: () => askReschedule(t) }, 'Muddatni ko\'chirish'));
@@ -362,6 +375,9 @@ export function TaskDetail(id) {
         pr ? h('span', { class: `chip ${pr.cls}` }, pr.label) : h('span', { class: `chip ${t.status === 'bajarildi' ? 'green' : 'grey'}` }, STATUS[t.status]),
         du ? h('span', { class: `chip ${du.cls}` }, du.label) : t.status === 'bajarildi' && onTime(t) !== null ? h('span', { class: `chip ${onTime(t) ? 'green' : 'amber'}` }, onTime(t) ? 'Vaqtida' : 'Kechikib') : null),
       h('h2', { class: 't-title', style: 'font-size:18px' }, t.title),
+      isOpen(t) && h('div', { class: 'quadpick', role: 'group', 'aria-label': 'Guruh' }, [1, 2, 3, 4].map((n) =>
+        h('button', { type: 'button', class: `chip ${t.quadrant === n ? QUAD[n].cls : 'grey'}${t.quadrant === n ? ' on' : ''}`, 'aria-pressed': String(t.quadrant === n),
+          onclick: () => updateTask(t.id, { quadrant: t.quadrant === n ? null : n }, t.quadrant === n ? 'Guruh olib tashlandi' : QUAD[n].label) }, QUAD[n].label))),
       t.description && h('div', { class: 'text' }, t.description),
       h('div', { class: 'kv' },
         kv('Holati', STATUS[t.status]), kv('Muddat', fmtDate(t.due_date)),
