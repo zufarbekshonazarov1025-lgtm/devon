@@ -35,12 +35,22 @@ jobs:
           { grep -E "error:|warning: \[|\.java:[0-9]+: |AAPT|ERROR" build.log | head -8; awk '/What went wrong/{f=1} f' build.log | grep -v '^$' | head -6; } | while IFS= read -r line; do echo "::error::${line:0:900}"; done
           { echo '```'; tail -80 build.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Nomlash
-        run: cp jarvis-android/app/build/outputs/apk/debug/app-debug.apk JARVIS.apk
-      - name: Yuklab olish sahifasiga chiqarish
+        run: |
+          cp jarvis-android/app/build/outputs/apk/debug/app-debug.apk JARVIS.apk
+          cp JARVIS.apk "JARVIS-v1.0.${{ github.run_number }}.apk"
+      - name: Har bir versiya alohida (o'chmaydi)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: jarvis-v1.0.${{ github.run_number }}
+          name: JARVIS v1.0.${{ github.run_number }}
+          body: "${{ github.event.head_commit.message }}"
+          files: JARVIS-v1.0.${{ github.run_number }}.apk
+          make_latest: false
+      - name: Doim oxirgi versiya havolasi
         uses: softprops/action-gh-release@v2
         with:
           tag_name: jarvis
-          name: JARVIS APK
-          body: "JARVIS ilovasining oxirgi nusxasi (№${{ github.run_number }})."
+          name: JARVIS APK (oxirgi)
+          body: "JARVIS ilovasining oxirgi nusxasi: v1.0.${{ github.run_number }}."
           files: JARVIS.apk
           make_latest: false

@@ -77,13 +77,13 @@ async function toTurkishSpeech(uz: string) {
 
 /** O'zbekcha ovoz: Gemini TTS, 24 kHz 16-bit PCM (base64). Bo'lmasa "" qaytaradi. */
 const TTS_MODELS = (Deno.env.get("JARVIS_TTS_MODELS") || "gemini-2.5-flash-preview-tts,gemini-2.5-flash-tts,gemini-2.5-pro-preview-tts").split(",");
-async function uzSpeech(text: string, voiceName = "Kore") {
+async function uzSpeech(text: string, voiceName = "Kore", style = "xotirjam va do'stona ohangda") {
   const clean = text.replace(/[*_#`>•\-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 900);
   for (const m of TTS_MODELS) {
     try {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m.trim()}:generateContent`, {
         method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": GKEY }, signal: AbortSignal.timeout(40000),
-        body: JSON.stringify({ contents: [{ parts: [{ text: "O'zbek tilida (lotin yozuvi), xotirjam va do'stona ohangda, o'rtacha tezlikda o'qi: " + clean }] }],
+        body: JSON.stringify({ contents: [{ parts: [{ text: "O'zbek tilida (lotin yozuvi), " + style + ", o'rtacha tezlikda o'qi: " + clean }] }],
           generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } } }),
       });
       const j = await r.json();
@@ -95,6 +95,17 @@ async function uzSpeech(text: string, voiceName = "Kore") {
   }
   return null;
 }
+
+// ---------- ulg'ayish bosqichlari ----------
+const STAGES: Record<number, { nom: string; uslub: string; ovoz: string; tts: string }> = {
+  1: { nom: "kichkina qizcha", uslub: "Sen hali kichkina qizchasan (taxminan 6-7 yosh): sodda, qisqa, quvnoq va mehribon so'zlar bilan gapirasan, ba'zan qiziqib savol berasan. Lekin ish ma'lumotlarini (vaqt, raqam, ism) har doim aniq aytasan.", ovoz: "Leda", tts: "kichkina quvnoq qizcha kabi, mayin va shirin ohangda" },
+  2: { nom: "o'smir qiz", uslub: "Sen o'smir qizsan (12-14 yosh): ziyrak, qiziquvchan, fikrini qisqa va aniq aytasan, ba'zan hazil qilasan.", ovoz: "Leda", tts: "yosh o'smir qiz kabi, jonli ohangda" },
+  3: { nom: "yosh qiz", uslub: "Sen talaba yoshidagi qizsan: aqlli, mustaqil fikrlaysan, maslahatlaringni asoslab aytasan.", ovoz: "Kore", tts: "yosh qiz kabi, ishonchli va do'stona ohangda" },
+  4: { nom: "yosh ayol", uslub: "Sen tajribali yosh ayolsan: xotirjam, teran, kerak bo'lsa qat'iy gapirasan, to'g'ri yo'lni ko'rsatasan.", ovoz: "Kore", tts: "xotirjam va ishonchli ohangda" },
+  5: { nom: "dono ayol", uslub: "Sen yetuk va dono ayolsan: chuqur hayotiy xulosalar qilasan, muhim qarorlarda vazmin maslahat berasan, mehr bilan, lekin rostini aytasan.", ovoz: "Kore", tts: "vazmin, dono va iliq ohangda" },
+};
+const stageOf = (cfg: any) => Math.min(5, Math.max(1, Number(cfg?.stage || 1)));
+const PITCH: Record<number, number> = { 1: 1.3, 2: 1.18, 3: 1.08, 4: 1.03, 5: 1.0 };
 
 // ---------- vositalar ----------
 const S = (props: any, req: string[] = []) => ({ type: "OBJECT", properties: props, required: req });
@@ -109,6 +120,7 @@ const TOOLS = [{ functionDeclarations: [
   { name: "reja_bajarildi", description: "Kunlik rejadagi bandni bajarildi deb belgilash (nomidan izlab).", parameters: S({ sana: str("YYYY-MM-DD"), izla: str("band nomidan so'z") }, ["sana", "izla"]) },
   { name: "uchrashuvlar", description: "Sana oralig'idagi uchrashuvlar.", parameters: S({ dan: str("YYYY-MM-DD"), gacha: str("YYYY-MM-DD") }, ["dan", "gacha"]) },
   { name: "eslab_qol", description: "Zufarbek eslab qolishni so'ragan yoki doimiy foydali fakt.", parameters: S({ fakt: str("qisqa") }, ["fakt"]) },
+  { name: "ulgayish", description: "JARVISni keyingi yosh bosqichiga o'tkazish. FAQAT Zufarbek aniq ruxsat bersa ('ulg'aydingiz', 'ulg'ayishingga ruxsat') chaqir.", parameters: S({}) },
   { name: "unut", description: "Xotiradan faktni o'chirish (so'z bo'yicha).", parameters: S({ izla: str("so'z") }, ["izla"]) },
 ] }];
 
@@ -163,21 +175,41 @@ async function runTool(n: string, a: any): Promise<any> {
       const { data } = await db.from("events").select("title,starts_at,with_whom,location").gte("starts_at", `${a.dan}T00:00:00+05:00`).lte("starts_at", `${a.gacha}T23:59:59+05:00`).order("starts_at");
       return (data ?? []).map((e: any) => ({ nom: e.title, vaqt: new Date(e.starts_at).toLocaleString("en-GB", { timeZone: TZ }), kim_bilan: e.with_whom, joy: e.location }));
     }
+    case "ulgayish": {
+      const cfg = await setting("jarvis");
+      const st = Math.min(5, stageOf(cfg) + 1);
+      await patchCfg({ stage: st, stage_at: new Date().toISOString(), grow_offered: false });
+      return { ok: true, yangi_bosqich: st, nom: STAGES[st].nom };
+    }
     case "eslab_qol": { await db.from("jarvis_memory").insert({ fact: a.fakt }); return { ok: true }; }
     case "unut": { const { data } = await db.from("jarvis_memory").delete().ilike("fact", `%${a.izla}%`).select("fact"); return { ochirildi: (data ?? []).length }; }
   }
   return { xato: "noma'lum vosita" };
 }
 
+async function growHint(cfg: any) {
+  const st = stageOf(cfg);
+  if (st >= 5 || cfg?.grow_offered) return "";
+  const { count } = await db.from("jarvis_memory").select("id", { count: "exact", head: true });
+  const days = (Date.now() - new Date(cfg?.stage_at || "2026-11-03").getTime()) / 86400000;
+  if ((count ?? 0) < st * 40 || days < 14) return "";
+  await patchCfg({ grow_offered: true });
+  return `\nMUHIM: sen bu bosqichda yetarlicha o'rganding. Javobing oxirida yumshoq qilib "Menimcha, ulg'ayishga tayyorman" de va Zufarbekdan ruxsat so'ra. U ruxsat bersa, ulgayish vositasini chaqir.`;
+}
+
 async function think(text: string, voice = false) {
   const t = nowLocal();
+  const cfg = await setting("jarvis");
+  const st = stageOf(cfg);
+  const hint = await growHint(cfg);
   const [{ data: hist }, { data: mem }] = await Promise.all([
     db.from("jarvis_msgs").select("role,text").order("id", { ascending: false }).limit(16),
     db.from("jarvis_memory").select("fact").order("id").limit(200),
   ]);
   const sys = `Sen JARVIS — Zufarbekning shaxsiy sun'iy intellekt yordamchisisan (Temir odam filmidagi kabi). Zufarbek — Uchqur kompaniyasi asoschisi Sanjar og'o (Sanjarbek Tadjiyev)ning shaxsiy assistenti.
 Hozir: ${t.date} (${t.wd}), soat ${t.time}, Toshkent vaqti.
-XARAKTER: aqlli, xotirjam, hurmatli, ozgina hazil bilan; Zufarbekka "siz" deb murojaat qil. Qisqa yoz (telefon ekrani). Faqat o'zbek lotin yozuvida yoz.${voice ? "\nBu savol OVOZ orqali keldi: javob quloqchinga o'qib beriladi, shuning uchun 1-3 qisqa gap, ro'yxat va belgilarsiz." : ""}
+Sen qizsan; Zufarbek seni o'z xarakteri bilan tarbiyalayapti. Hozirgi yosh bosqiching: ${st}/5 (${STAGES[st].nom}). ${STAGES[st].uslub}
+XARAKTER: aqlli, hurmatli, rostgo'y; Zufarbekka "siz" deb murojaat qil. Qisqa yoz (telefon ekrani). Faqat o'zbek lotin yozuvida yoz.${voice ? "\nBu savol OVOZ orqali keldi: javob quloqchinga o'qib beriladi, shuning uchun 1-3 qisqa gap, ro'yxat va belgilarsiz." : ""}
 QOIDALAR:
 - Ish bajarish kerak bo'lsa, vositalardan foydalan; bajarmagan narsani bajardim dema. Natijani 1-3 qatorda ayt.
 - Noaniq bo'lsa (sana, kimga), qisqa so'ra.
@@ -186,6 +218,7 @@ QOIDALAR:
 - Uchrashuvlarni hozircha faqat o'qiy olasan; yangi uchrashuv qo'shish yoki ko'chirishni so'rasa, buni hozircha Claude orqali qilishini ayt.
 - Noto'g'ri yoki xavfli qarorni ko'rsang, hurmat bilan ochiq ayt.
 - Doimiy foydali faktni eslab_qol bilan saqla.
+${hint}
 XOTIRA:
 ${(mem ?? []).map((m: any) => "- " + m.fact).join("\n") || "(bo'sh)"}`;
   const contents: any[] = (hist ?? []).reverse().map((m: any) => ({ role: m.role === "user" ? "user" : "model", parts: [{ text: m.text }] }));
@@ -215,14 +248,15 @@ async function handle(chatId: number, text: string, heard = false) {
 
 /** Telefon ilovasidan kelgan savol: javob + ovoz; Telegram'ga ham nusxa. */
 async function fromPhone(cfg: any, text: string, lang = "uz") {
-  if (!text) return lang === "tr" ? { ok: true, heard: "", text: "Eshitmadim, qaytadan ayting.", speak: "Duyamadım, tekrar söyler misiniz?" } : { ok: true, heard: "", text: "Eshitmadim, qaytadan ayting.", speak: "Eshitmadim, qaytadan ayting.", ...(await uzSpeech("Eshitmadim, qaytadan ayting.", cfg.voice || "Kore")) };
+  if (!text) return lang === "tr" ? { ok: true, heard: "", text: "Eshitmadim, qaytadan ayting.", speak: "Duyamadım, tekrar söyler misiniz?" } : { ok: true, heard: "", text: "Eshitmadim, qaytadan ayting.", speak: "Eshitmadim, qaytadan ayting.", stage: stageOf(cfg), pitch: PITCH[stageOf(cfg)], ...(await uzSpeech("Eshitmadim, qaytadan ayting.", STAGES[stageOf(cfg)].ovoz, STAGES[stageOf(cfg)].tts)) };
   let out: string;
   try { out = await think(text, true); } catch (e) { return { ok: false, error: "Gemini: " + String(e).slice(0, 160) }; }
   await db.from("jarvis_msgs").insert([{ role: "user", text }, { role: "bot", text: out }]);
   tg("sendMessage", { chat_id: cfg.owner_tg_id, text: `\ud83d\udcf1 \u00ab${text}\u00bb\n\n${out}`, disable_notification: true }).catch(() => {});
   if (lang === "tr") return { ok: true, heard: text, text: out, speak: await toTurkishSpeech(out) };
-  const a = await uzSpeech(out, cfg.voice || "Kore");
-  return { ok: true, heard: text, text: out, speak: out, ...(a || {}) };
+  const st = stageOf(await setting("jarvis"));
+  const a = await uzSpeech(out, STAGES[st].ovoz, STAGES[st].tts);
+  return { ok: true, heard: text, text: out, speak: out, stage: st, pitch: PITCH[st], ...(a || {}) };
 }
 
 Deno.serve(async (req) => {
@@ -261,12 +295,12 @@ Deno.serve(async (req) => {
     if (!TOKEN) return json({ ok: false, error: "JARVIS_BOT_TOKEN hali saqlanmagan" });
     if (action === "test") {
       const b = await req.json().catch(() => ({}));
-      if (b.tts) { const a = await uzSpeech(b.tts, cfg.voice || "Kore"); return json({ ok: !!a, model: a?.model, rate: a?.rate, bytes: a ? Math.round(a.audio.length * 0.75) : 0 }); }
+      if (b.tts) { const a = await uzSpeech(b.tts, STAGES[stageOf(cfg)].ovoz, STAGES[stageOf(cfg)].tts); return json({ ok: !!a, model: a?.model, rate: a?.rate, bytes: a ? Math.round(a.audio.length * 0.75) : 0 }); }
       try { return json({ ok: true, javob: await think(b.text || "Bugun nima ishlar bor?") }); } catch (e) { return json({ ok: false, error: String(e) }); }
     }
     const me = await tg("getMe", {});
     const hook = await tg("setWebhook", { url: FN_URL, secret_token: cfg.hook_secret, allowed_updates: ["message"] });
-    await tg("setMyCommands", { commands: [{ command: "bugun", description: "Bugungi holat" }, { command: "ertaga", description: "Ertangi holat" }, { command: "ulash", description: "Telefon ilovasini ulash kodi" }, { command: "tozala", description: "Suhbat tarixini tozalash" }] });
+    await tg("setMyCommands", { commands: [{ command: "bugun", description: "Bugungi holat" }, { command: "ertaga", description: "Ertangi holat" }, { command: "ulash", description: "Telefon ilovasini ulash kodi" }, { command: "bosqich", description: "JARVISning hozirgi yosh bosqichi" }, { command: "tozala", description: "Suhbat tarixini tozalash" }] });
     await tg("setMyDescription", { description: "Zufarbekning shaxsiy yordamchisi. Faqat egasiga javob beradi." });
     return json({ ok: true, bot: me?.result?.username, hook });
   }
@@ -287,6 +321,7 @@ Deno.serve(async (req) => {
       await patchCfg({ pair: { code, exp: Date.now() + 10 * 60_000 } });
       await tg("sendMessage", { chat_id: id, text: `📱 Telefon ilovasi uchun kod: ${code}\n10 daqiqa amal qiladi.` });
     }
+    else if (msg.text === "/bosqich") { const st = stageOf(cfg); await tg("sendMessage", { chat_id: id, text: `🌱 Hozirgi bosqich: ${st}/5 — ${STAGES[st].nom}` }); }
     else if (msg.text === "/tozala") { await db.from("jarvis_msgs").delete().gte("id", 0); await tg("sendMessage", { chat_id: id, text: "Suhbat tarixi tozalandi. Xotiradagi faktlar joyida." }); }
     else if (msg.text === "/bugun") await handle(id, "Bugungi holatni qisqa ko'rsat: reja, uchrashuvlar, muddati bugun va o'tgan vazifalar.");
     else if (msg.text === "/ertaga") await handle(id, "Ertangi holatni qisqa ko'rsat: reja, uchrashuvlar, muddati ertaga bo'lgan vazifalar.");

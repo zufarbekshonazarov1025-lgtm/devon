@@ -270,8 +270,10 @@ public class JarvisService extends Service {
             String heard = r.optString("heard"), text = r.optString("text"), speak = r.optString("speak", text);
             setStatus("Tayyor", "🎙 " + heard + "\n\n" + text);
             String audio = r.optString("audio", "");
-            if (!audio.isEmpty()) playPcm(android.util.Base64.decode(audio, android.util.Base64.DEFAULT), r.optInt("rate", 24000));
-            else say(speak);
+            float pitch = (float) r.optDouble("pitch", 1.0);
+            Api.prefs(this).edit().putFloat("pitch", pitch).apply();
+            if (!audio.isEmpty()) playPcm(android.util.Base64.decode(audio, android.util.Base64.DEFAULT), r.optInt("rate", 24000), pitch);
+            else { tts.setPitch(pitch); say(speak); }
         } catch (Exception e) {
             setStatus("Xato", "⚠️ " + e.getMessage());
             beep(ToneGenerator.TONE_PROP_NACK);
@@ -291,7 +293,7 @@ public class JarvisService extends Service {
     }
 
     /** Serverdan kelgan o'zbekcha ovoz (16-bit PCM) ni quloqchin yoki karnaydan ijro etadi. */
-    private void playPcm(byte[] pcm, int rate) {
+    private void playPcm(byte[] pcm, int rate, float pitch) {
         new Thread(() -> {
             android.media.AudioTrack t = null;
             try {
@@ -302,6 +304,8 @@ public class JarvisService extends Service {
                         .setTransferMode(android.media.AudioTrack.MODE_STREAM)
                         .setBufferSizeInBytes(Math.max(8192, android.media.AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)))
                         .build();
+                // bosqichga qarab ovoz ohangi: kichkina qizcha — balandroq, ulg'aygan sari pasayadi
+                try { t.setPlaybackParams(new android.media.PlaybackParams().setPitch(pitch).setSpeed(1f)); } catch (Exception ignored) { }
                 t.play();
                 t.write(pcm, 0, pcm.length);
                 int frames = pcm.length / 2;
