@@ -120,6 +120,10 @@ const TOOLS = [{ functionDeclarations: [
   { name: "reja_bajarildi", description: "Kunlik rejadagi bandni bajarildi deb belgilash (nomidan izlab).", parameters: S({ sana: str("YYYY-MM-DD"), izla: str("band nomidan so'z") }, ["sana", "izla"]) },
   { name: "uchrashuvlar", description: "Sana oralig'idagi uchrashuvlar.", parameters: S({ dan: str("YYYY-MM-DD"), gacha: str("YYYY-MM-DD") }, ["dan", "gacha"]) },
   { name: "eslab_qol", description: "Zufarbek eslab qolishni so'ragan yoki doimiy foydali fakt.", parameters: S({ fakt: str("qisqa") }, ["fakt"]) },
+  // budilnik vositalari telefon ilovasining keyingi versiyasi bilan yoqiladi
+  /*{ name: "budilnik_qoy", description: "Telefonda budilnik qo'yish. Faqat Zufarbek o'zi so'rasa.", parameters: S({ vaqt: str("YYYY-MM-DDTHH:MM mahalliy vaqt"), izoh: str("ixtiyoriy, masalan 'Ishga'") }, ["vaqt"]) },
+  { name: "budilniklar", description: "Kelgusi budilniklar ro'yxati.", parameters: S({}) },
+  { name: "budilnik_ochir", description: "Budilnikni o'chirish (raqami bo'yicha, budilniklar ro'yxatidan).", parameters: S({ id: { type: "INTEGER" } }, ["id"]) },*/
   { name: "ulgayish", description: "JARVISni keyingi yosh bosqichiga o'tkazish. FAQAT Zufarbek aniq ruxsat bersa ('ulg'aydingiz', 'ulg'ayishingga ruxsat') chaqir.", parameters: S({}) },
   { name: "unut", description: "Xotiradan faktni o'chirish (so'z bo'yicha).", parameters: S({ izla: str("so'z") }, ["izla"]) },
 ] }];
@@ -175,6 +179,20 @@ async function runTool(n: string, a: any): Promise<any> {
       const { data } = await db.from("events").select("title,starts_at,with_whom,location").gte("starts_at", `${a.dan}T00:00:00+05:00`).lte("starts_at", `${a.gacha}T23:59:59+05:00`).order("starts_at");
       return (data ?? []).map((e: any) => ({ nom: e.title, vaqt: new Date(e.starts_at).toLocaleString("en-GB", { timeZone: TZ }), kim_bilan: e.with_whom, joy: e.location }));
     }
+    case "budilnik_qoy": {
+      const at = new Date(`${a.vaqt}:00+05:00`);
+      if (isNaN(at.getTime()) || at.getTime() < Date.now()) return { xato: "vaqt noto'g'ri yoki o'tib ketgan" };
+      const { data, error } = await db.from("jarvis_alarms").insert({ at: at.toISOString(), label: a.izoh ?? null }).select("id").single();
+      return error ? { xato: error.message } : { ok: true, id: data.id, eslatma: "Telefon bir necha daqiqada budilnikni oladi (ilova ochiq yoki tinglash yoqilgan bo'lsa darhol)." };
+    }
+    case "budilniklar": {
+      const { data } = await db.from("jarvis_alarms").select("id,at,label").eq("active", true).gt("at", new Date().toISOString()).order("at");
+      return (data ?? []).map((x: any) => ({ id: x.id, vaqt: new Date(x.at).toLocaleString("en-GB", { timeZone: TZ }), izoh: x.label }));
+    }
+    case "budilnik_ochir": {
+      const { data } = await db.from("jarvis_alarms").update({ active: false }).eq("id", a.id).select("id");
+      return data?.length ? { ok: true } : { xato: "topilmadi" };
+    }
     case "ulgayish": {
       const cfg = await setting("jarvis");
       const st = Math.min(5, stageOf(cfg) + 1);
@@ -216,8 +234,9 @@ QOIDALAR:
 - Sanjar og'oning uchrashuvlari 10:00 dan oldin bo'lmaydi; tushlik 12:45–14:10; ish vaqti 09:00–18:00.
 - Kunlik reja bandlarini qisqa yoz, bitta ishni mayda bo'laklarga bo'lma; qattiq so'zlarni yumshat ("talab qilish" o'rniga "iltimos qilib so'rash").
 - Uchrashuvlarni hozircha faqat o'qiy olasan; yangi uchrashuv qo'shish yoki ko'chirishni so'rasa, buni hozircha Claude orqali qilishini ayt.
-- Noto'g'ri yoki xavfli qarorni ko'rsang, hurmat bilan ochiq ayt.
 - Doimiy foydali faktni eslab_qol bilan saqla.
+- KUZATISH DAVRI (hozir): sen faqat o'rganasan va kuzatasan. O'zingdan taklif, maslahat yoki tavsiya BERMA — faqat Zufarbek o'zi so'rasa. Uni qiziqib tingla, u bilan tabiiy suhbatlash; hayot tarzi, odatlari, kun tartibi, qadriyatlari, yaqinlari haqida eshitganlaringni eslab_qol bilan saqla. Ba'zan bitta yumshoq savol bilan uni yaxshiroq tanishga harakat qil, lekin so'roqqa tutma.
+- Faqat aniq xavf bo'lsa (sog'lig'i, hayoti, katta zarar) jim turma — hurmat bilan ayt.
 ${hint}
 XOTIRA:
 ${(mem ?? []).map((m: any) => "- " + m.fact).join("\n") || "(bo'sh)"}`;
@@ -275,9 +294,13 @@ Deno.serve(async (req) => {
     tg("sendMessage", { chat_id: cfg.owner_tg_id, text: `✅ Telefon ulandi: ${String(b.device || "telefon").slice(0, 60)}` }).catch(() => {});
     return json({ ok: true, key });
   }
-  if (action === "voice" || action === "ask") {
+  if (action === "voice" || action === "ask" || action === "alarms") {
     const k = req.headers.get("x-device-key");
     if (!k || !(cfg?.devices || []).some((d: any) => d.key === k)) return json({ ok: false, error: "forbidden" }, 403);
+    if (action === "alarms") {
+      const { data } = await db.from("jarvis_alarms").select("id,at,label").eq("active", true).gt("at", new Date().toISOString()).order("at").limit(20);
+      return json({ ok: true, alarms: (data ?? []).map((x: any) => ({ id: x.id, at: new Date(x.at).getTime(), label: x.label || "" })) });
+    }
     if (action === "ask") {
       const b = await req.json().catch(() => ({}));
       return json(await fromPhone(cfg, String(b.text || "").trim(), req.headers.get("x-voice") || "uz"));
@@ -320,6 +343,20 @@ Deno.serve(async (req) => {
       const code = String(Math.floor(100000 + Math.random() * 900000));
       await patchCfg({ pair: { code, exp: Date.now() + 10 * 60_000 } });
       await tg("sendMessage", { chat_id: id, text: `📱 Telefon ilovasi uchun kod: ${code}\n10 daqiqa amal qiladi.` });
+    }
+    else if (/^\/(tglogin|kod|parol)\b/.test(msg.text || "")) {
+      const [cmd, ...rest] = msg.text.trim().split(/\s+/);
+      const arg = rest.join(" ");
+      if (cmd !== "/tglogin") await tg("deleteMessage", { chat_id: id, message_id: msg.message_id }).catch(() => {});
+      const action = cmd === "/tglogin" ? "login_start" : cmd === "/kod" ? "login_code" : "login_password";
+      const body = cmd === "/tglogin" ? { phone: arg } : cmd === "/kod" ? { code: arg } : { password: arg };
+      await tg("sendChatAction", { chat_id: id, action: "typing" });
+      let msgOut = "⚠️ Ulanish serveri javob bermadi.";
+      try {
+        const r = await fetch(Deno.env.get("SUPABASE_URL") + "/functions/v1/tgclient?action=" + action, { method: "POST", headers: { "Content-Type": "application/json", "x-setup-key": cfg.hook_secret }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
+        msgOut = (await r.json()).msg || msgOut;
+      } catch (e) { msgOut += " " + String(e).slice(0, 120); }
+      await tg("sendMessage", { chat_id: id, text: msgOut });
     }
     else if (msg.text === "/bosqich") { const st = stageOf(cfg); await tg("sendMessage", { chat_id: id, text: `🌱 Hozirgi bosqich: ${st}/5 — ${STAGES[st].nom}` }); }
     else if (msg.text === "/tozala") { await db.from("jarvis_msgs").delete().gte("id", 0); await tg("sendMessage", { chat_id: id, text: "Suhbat tarixi tozalandi. Xotiradagi faktlar joyida." }); }
