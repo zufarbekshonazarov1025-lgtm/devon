@@ -269,10 +269,13 @@ public class JarvisService extends Service {
             if (!r.optBoolean("ok")) throw new Exception(r.optString("error", "server javob bermadi"));
             String heard = r.optString("heard"), text = r.optString("text"), speak = r.optString("speak", text);
             setStatus("Tayyor", "🎙 " + heard + "\n\n" + text);
-            say(speak);
+            String audio = r.optString("audio", "");
+            if (!audio.isEmpty()) playPcm(android.util.Base64.decode(audio, android.util.Base64.DEFAULT), r.optInt("rate", 24000));
+            else say(speak);
         } catch (Exception e) {
             setStatus("Xato", "⚠️ " + e.getMessage());
-            say("Bağlantı kurulamadı.");
+            beep(ToneGenerator.TONE_PROP_NACK);
+            backToWait();
         }
     }
 
@@ -285,6 +288,32 @@ public class JarvisService extends Service {
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
         updateNotif("Gapiryapman…");
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, p, "j" + System.currentTimeMillis());
+    }
+
+    /** Serverdan kelgan o'zbekcha ovoz (16-bit PCM) ni quloqchin yoki karnaydan ijro etadi. */
+    private void playPcm(byte[] pcm, int rate) {
+        new Thread(() -> {
+            android.media.AudioTrack t = null;
+            try {
+                updateNotif("Gapiryapman…");
+                t = new android.media.AudioTrack.Builder()
+                        .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                        .setAudioFormat(new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
+                        .setTransferMode(android.media.AudioTrack.MODE_STREAM)
+                        .setBufferSizeInBytes(Math.max(8192, android.media.AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)))
+                        .build();
+                t.play();
+                t.write(pcm, 0, pcm.length);
+                int frames = pcm.length / 2;
+                long until = System.currentTimeMillis() + frames * 1000L / rate + 2000;
+                while (t.getPlaybackHeadPosition() < frames && System.currentTimeMillis() < until) Thread.sleep(50);
+                t.stop();
+            } catch (Exception ignored) {
+            } finally {
+                if (t != null) t.release();
+                backToWait();
+            }
+        }).start();
     }
 
     private void backToWait() {

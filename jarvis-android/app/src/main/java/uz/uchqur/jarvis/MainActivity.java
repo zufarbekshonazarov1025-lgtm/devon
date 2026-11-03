@@ -114,6 +114,11 @@ public class MainActivity extends Activity {
         bt.setChecked(p.getBoolean("bt_mic", true));
         bt.setOnCheckedChangeListener((x, on) -> { p.edit().putBoolean("bt_mic", on).apply(); restartIfRunning(); });
         set.addView(bt);
+        Switch uz = new Switch(this);
+        uz.setText("Ovozli javob o'zbekcha (o'chirsangiz — turkcha)"); uz.setTextColor(TXT);
+        uz.setChecked(!"tr".equals(p.getString("voice_lang", "uz")));
+        uz.setOnCheckedChangeListener((x, on) -> p.edit().putString("voice_lang", on ? "uz" : "tr").apply());
+        set.addView(uz);
         TextView sens = tv("", 14, MUTED);
         set.addView(sens);
         SeekBar sb = new SeekBar(this);
@@ -130,7 +135,7 @@ public class MainActivity extends Activity {
         Button xi = btn("Fonda ishlash sozlamalari (Xiaomi)", false);
         xi.setOnClickListener(v -> openBackgroundSettings());
         set.addView(xi, lp());
-        Button ttsB = btn("Turkcha ovozni sozlash", false);
+        Button ttsB = btn("Turkcha ovozni sozlash (zaxira)", false);
         ttsB.setOnClickListener(v -> { try { startActivity(new Intent("com.android.settings.TTS_SETTINGS")); } catch (Exception e) { startActivity(new Intent(Settings.ACTION_SETTINGS)); } });
         set.addView(ttsB, lp());
         root.addView(set);

@@ -70,9 +70,30 @@ async function transcribe(fileId: string, mime: string) {
 /** Ovozli javob uchun turkcha og'zaki variant (Zufarbek ovozda turkchani yaxshiroq tushunadi). */
 async function toTurkishSpeech(uz: string) {
   try {
-    const c = await gemini({ contents: [{ role: "user", parts: [{ text: "Quyidagi o'zbekcha javobni turk tiliga tabiiy, qisqa og'zaki nutq qilib o'gir. Ro'yxat belgilari, emoji va qavslarni olib tashla; raqamli vazifa nomerlarini 'numara' deb ayt. Faqat tarjimani qaytar.\n\n" + uz }] }], generationConfig: { temperature: 0.2 } }, FAST);
+    const c = await gemini({ contents: [{ role: "user", parts: [{ text: "Quyidagi o'zbekcha javobni turk tiliga tabiiy, qisqa og'zaki nutq qilib o'gir. Ro'yxat belgilari, emoji va qavslarni olib tashla. Faqat tarjimani qaytar.\n\n" + uz }] }], generationConfig: { temperature: 0.2 } }, FAST);
     return textOf(c) || uz;
   } catch { return uz; }
+}
+
+/** O'zbekcha ovoz: Gemini TTS, 24 kHz 16-bit PCM (base64). Bo'lmasa "" qaytaradi. */
+const TTS_MODELS = (Deno.env.get("JARVIS_TTS_MODELS") || "gemini-2.5-flash-preview-tts,gemini-2.5-flash-tts,gemini-2.5-pro-preview-tts").split(",");
+async function uzSpeech(text: string, voiceName = "Kore") {
+  const clean = text.replace(/[*_#`>•\-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 900);
+  for (const m of TTS_MODELS) {
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m.trim()}:generateContent`, {
+        method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": GKEY }, signal: AbortSignal.timeout(40000),
+        body: JSON.stringify({ contents: [{ parts: [{ text: "O'zbek tilida (lotin yozuvi), xotirjam va do'stona ohangda, o'rtacha tezlikda o'qi: " + clean }] }],
+          generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } } }),
+      });
+      const j = await r.json();
+      const d = j?.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData || p.inline_data);
+      const data = d?.inlineData?.data || d?.inline_data?.data;
+      if (r.ok && data) return { audio: data as string, rate: Number(String(d?.inlineData?.mimeType || "").match(/rate=(\d+)/)?.[1] || 24000), model: m };
+      console.log("tts", m, r.status, JSON.stringify(j).slice(0, 200));
+    } catch (e) { console.log("tts", m, String(e)); }
+  }
+  return null;
 }
 
 // ---------- vositalar ----------
@@ -192,15 +213,16 @@ async function handle(chatId: number, text: string, heard = false) {
   await tg("sendMessage", { chat_id: chatId, text: (heard ? `🎙 «${text}»\n\n` : "") + out });
 }
 
-/** Telefon ilovasidan kelgan savol: javob + turkcha ovoz matni; Telegram'ga ham nusxa. */
-async function fromPhone(cfg: any, text: string) {
-  if (!text) return { ok: true, heard: "", text: "Eshitmadim, qaytadan ayting.", speak: "Duyamadım, tekrar söyler misiniz?" };
+/** Telefon ilovasidan kelgan savol: javob + ovoz; Telegram'ga ham nusxa. */
+async function fromPhone(cfg: any, text: string, lang = "uz") {
+  if (!text) return lang === "tr" ? { ok: true, heard: "", text: "Eshitmadim, qaytadan ayting.", speak: "Duyamadım, tekrar söyler misiniz?" } : { ok: true, heard: "", text: "Eshitmadim, qaytadan ayting.", speak: "Eshitmadim, qaytadan ayting.", ...(await uzSpeech("Eshitmadim, qaytadan ayting.", cfg.voice || "Kore")) };
   let out: string;
   try { out = await think(text, true); } catch (e) { return { ok: false, error: "Gemini: " + String(e).slice(0, 160) }; }
   await db.from("jarvis_msgs").insert([{ role: "user", text }, { role: "bot", text: out }]);
-  const speak = await toTurkishSpeech(out);
-  tg("sendMessage", { chat_id: cfg.owner_tg_id, text: `📱 «${text}»\n\n${out}`, disable_notification: true }).catch(() => {});
-  return { ok: true, heard: text, text: out, speak };
+  tg("sendMessage", { chat_id: cfg.owner_tg_id, text: `\ud83d\udcf1 \u00ab${text}\u00bb\n\n${out}`, disable_notification: true }).catch(() => {});
+  if (lang === "tr") return { ok: true, heard: text, text: out, speak: await toTurkishSpeech(out) };
+  const a = await uzSpeech(out, cfg.voice || "Kore");
+  return { ok: true, heard: text, text: out, speak: out, ...(a || {}) };
 }
 
 Deno.serve(async (req) => {
@@ -224,13 +246,13 @@ Deno.serve(async (req) => {
     if (!k || !(cfg?.devices || []).some((d: any) => d.key === k)) return json({ ok: false, error: "forbidden" }, 403);
     if (action === "ask") {
       const b = await req.json().catch(() => ({}));
-      return json(await fromPhone(cfg, String(b.text || "").trim()));
+      return json(await fromPhone(cfg, String(b.text || "").trim(), req.headers.get("x-voice") || "uz"));
     }
     const bytes = new Uint8Array(await req.arrayBuffer());
     if (bytes.length < 2000 || bytes.length > 2_000_000) return json({ ok: false, error: "ovoz hajmi noto'g'ri" });
     let heard = "";
     try { heard = (await transcribeBytes(bytes, req.headers.get("content-type") || "audio/wav")).trim(); } catch (e) { return json({ ok: false, error: "Ovozni o'qib bo'lmadi: " + String(e).slice(0, 160) }); }
-    return json(await fromPhone(cfg, heard));
+    return json(await fromPhone(cfg, heard, req.headers.get("x-voice") || "uz"));
   }
 
   // ---- sozlash va sinov ----
@@ -239,6 +261,7 @@ Deno.serve(async (req) => {
     if (!TOKEN) return json({ ok: false, error: "JARVIS_BOT_TOKEN hali saqlanmagan" });
     if (action === "test") {
       const b = await req.json().catch(() => ({}));
+      if (b.tts) { const a = await uzSpeech(b.tts, cfg.voice || "Kore"); return json({ ok: !!a, model: a?.model, rate: a?.rate, bytes: a ? Math.round(a.audio.length * 0.75) : 0 }); }
       try { return json({ ok: true, javob: await think(b.text || "Bugun nima ishlar bor?") }); } catch (e) { return json({ ok: false, error: String(e) }); }
     }
     const me = await tg("getMe", {});

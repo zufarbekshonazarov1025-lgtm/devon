@@ -19,6 +19,8 @@ public class Api {
 
     static SharedPreferences prefs(Context c) { return c.getSharedPreferences("jarvis", Context.MODE_PRIVATE); }
     static String key(Context c) { return prefs(c).getString("device_key", ""); }
+    static volatile String voiceLang = "uz";
+    static void loadLang(Context c) { voiceLang = prefs(c).getString("voice_lang", "uz"); }
 
     private static JSONObject post(String action, String key, String contentType, byte[] body) throws Exception {
         HttpURLConnection h = (HttpURLConnection) new URL(URL_BASE + "?action=" + action).openConnection();
@@ -28,6 +30,7 @@ public class Api {
         h.setRequestMethod("POST");
         h.setRequestProperty("Content-Type", contentType);
         if (key != null && !key.isEmpty()) h.setRequestProperty("x-device-key", key);
+        h.setRequestProperty("x-voice", voiceLang);
         try (OutputStream o = h.getOutputStream()) { o.write(body); }
         int code = h.getResponseCode();
         InputStream in = code < 400 ? h.getInputStream() : h.getErrorStream();
@@ -50,10 +53,12 @@ public class Api {
 
     /** Ovozli buyruq: WAV yuboradi, {heard, text, speak} qaytaradi. */
     static JSONObject voice(Context c, short[] pcm, int n) throws Exception {
+        loadLang(c);
         return post("voice", key(c), "audio/wav", wav(pcm, n));
     }
 
     static JSONObject ask(Context c, String text) throws Exception {
+        loadLang(c);
         return post("ask", key(c), "application/json", new JSONObject().put("text", text).toString().getBytes("UTF-8"));
     }
 
