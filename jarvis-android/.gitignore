@@ -1,0 +1,4 @@
+app/src/main/assets/*.onnx
+build/
+app/build/
+.gradle/

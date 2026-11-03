@@ -1,0 +1,46 @@
+name: JARVIS APK yig'ish
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['jarvis-android/**', '.github/workflows/jarvis.yml']
+permissions:
+  contents: write
+concurrency: { group: jarvis-apk, cancel-in-progress: true }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.7' }
+      - name: "\"Hey Jarvis\" modellarini yuklash"
+        run: |
+          A=jarvis-android/app/src/main/assets; mkdir -p $A
+          B=https://github.com/dscripka/openWakeWord/releases/download/v0.5.1
+          curl -sSfL -o $A/melspectrogram.onnx $B/melspectrogram.onnx
+          curl -sSfL -o $A/embedding_model.onnx $B/embedding_model.onnx
+          curl -sSfL -o $A/hey_jarvis.onnx $B/hey_jarvis_v0.1.onnx
+          ls -la $A
+      - name: Yig'ish
+        run: |
+          set -o pipefail
+          gradle -p jarvis-android assembleDebug --no-daemon 2>&1 | tee build.log
+      - name: Xatoni ko'rsatish
+        if: failure()
+        run: |
+          { grep -E "error:|warning: \[|\.java:[0-9]+: |AAPT|ERROR" build.log | head -8; awk '/What went wrong/{f=1} f' build.log | grep -v '^$' | head -6; } | while IFS= read -r line; do echo "::error::${line:0:900}"; done
+          { echo '```'; tail -80 build.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Nomlash
+        run: cp jarvis-android/app/build/outputs/apk/debug/app-debug.apk JARVIS.apk
+      - name: Yuklab olish sahifasiga chiqarish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: jarvis
+          name: JARVIS APK
+          body: "JARVIS ilovasining oxirgi nusxasi (№${{ github.run_number }})."
+          files: JARVIS.apk
+          make_latest: false
