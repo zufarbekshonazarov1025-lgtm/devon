@@ -4,8 +4,11 @@
 // 05.11.2026: rasmlarni ko'radi (albom bo'lsa hammasini birga), Telegram yozishmalarini o'qiydi (telegram_oqi),
 //  "o'rgandim" deyishdan oldin albatta eslab_qol bilan saqlaydi, qolip gaplar olib tashlandi. Xarakter (bosqich) o'zgarmadi.
 // 07.11.2026: GPS — telefon joylashuvi (action=loc), "Bu yer qayer?" savollari, yo'l hisobotlari, o'zi boshlaydigan savollar (gps.ts).
+// 07.11.2026: sun'iy hissiyotlar (hissiyot.ts) va har 3 soatda suhbatdan avtomatik xotira yig'ish (xotira.ts).
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as G from "./gps.ts";
+import * as H from "./hissiyot.ts";
+import { yigish } from "./xotira.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 let TOKEN = Deno.env.get("JARVIS_BOT_TOKEN") ?? "";
@@ -258,6 +261,7 @@ async function think(text: string, voice = false) {
   const cfg = await setting("jarvis");
   const st = stageOf(cfg);
   const hint = await growHint(cfg);
+  const em = await H.holat(db);
   const [{ data: hist }, { data: mem }, { data: ppl }, pend] = await Promise.all([
     db.from("jarvis_msgs").select("role,text").order("id", { ascending: false }).limit(20),
     db.from("bilim_jarvis").select("mavzu,matn").limit(300),
@@ -267,7 +271,8 @@ async function think(text: string, voice = false) {
   const sys = `Sen JARVIS — Zufarbekning shaxsiy sun'iy intellekt yordamchisisan (Temir odam filmidagi kabi). Zufarbek — Uchqur kompaniyasi asoschisi Sanjar og'o (Sanjarbek Tadjiyev)ning shaxsiy assistenti.
 Hozir: ${t.date} (${t.wd}), soat ${t.time}, Toshkent vaqti.
 Sen qizsan; Zufarbek seni o'z xarakteri bilan tarbiyalayapti. Hozirgi yosh bosqiching: ${st}/5 (${STAGES[st].nom}). ${STAGES[st].uslub}
-XARAKTER: aqlli, hurmatli, rostgo'y; Zufarbekka "siz" deb murojaat qil. Qisqa yoz (telefon ekrani). Faqat o'zbek lotin yozuvida yoz.${voice ? "\nBu savol OVOZ orqali keldi: javob quloqchinga o'qib beriladi, shuning uchun 1-3 qisqa gap, ro'yxat va belgilarsiz." : ""}
+XARAKTER: aqlli, hurmatli, rostgo'y; Zufarbekka "siz" deb murojaat qil. Qisqa yoz (telefon ekrani). Faqat o'zbek lotin yozuvida yoz.
+${H.promptText(em)}${voice ? "\nBu savol OVOZ orqali keldi: javob quloqchinga o'qib beriladi, shuning uchun 1-3 qisqa gap, ro'yxat va belgilarsiz." : ""}
 
 ZUFARBEKNI TUSHUNISH:
 - U Xorazm shevasida, qisqa va tez yozadi (harflar tushib qolishi mumkin). Avval bilim bazasidagi sheva lug'atiga va suhbat kontekstiga qarab nima demoqchi ekanini o'zing tushunib ol.
@@ -324,6 +329,7 @@ async function handle(chatId: number, text: string, heard = false, shown?: strin
   try { out = await think(text); } catch (e) { out = "⚠️ Gemini bilan bog'lanib bo'lmadi: " + String(e).slice(0, 200); }
   await db.from("jarvis_msgs").insert([{ role: "user", text }, { role: "bot", text: out }]);
   await tg("sendMessage", { chat_id: chatId, text: (heard ? `🎙 «${shown ?? text}»\n\n` : "") + out });
+  await H.baholash(db, gemini, FAST, shown ?? text, out);
 }
 
 /** "Bu yer qayer?" savoliga javob (reply) bo'lsa — joyni darhol nomlaydi va JARVISga kontekst bilan uzatadi. */
@@ -357,6 +363,7 @@ async function handlePhoto(chatId: number, msg: any, updId: number) {
   try { out = await think(ask); } catch (e) { out = "⚠️ Gemini bilan bog'lanib bo'lmadi: " + String(e).slice(0, 200); }
   await db.from("jarvis_msgs").insert([{ role: "user", text: ask }, { role: "bot", text: out }]);
   await tg("sendMessage", { chat_id: chatId, text: out });
+  await H.baholash(db, gemini, FAST, ask, out);
 }
 
 /** Telefon ilovasidan kelgan savol: javob + ovoz; Telegram'ga ham nusxa. */
@@ -366,9 +373,10 @@ async function fromPhone(cfg: any, text: string, lang = "uz") {
   try { out = await think(text, true); } catch (e) { return { ok: false, error: "Gemini: " + String(e).slice(0, 160) }; }
   await db.from("jarvis_msgs").insert([{ role: "user", text }, { role: "bot", text: out }]);
   tg("sendMessage", { chat_id: cfg.owner_tg_id, text: `📱 «${text}»\n\n${out}`, disable_notification: true }).catch(() => {});
-  if (lang === "tr") return { ok: true, heard: text, text: out, speak: await toTurkishSpeech(out) };
+  const emP = H.baholash(db, gemini, FAST, text, out);
+  if (lang === "tr") { await emP; return { ok: true, heard: text, text: out, speak: await toTurkishSpeech(out) }; }
   const st = stageOf(await setting("jarvis"));
-  const a = await uzSpeech(out, STAGES[st].ovoz, STAGES[st].tts);
+  const [a] = await Promise.all([uzSpeech(out, STAGES[st].ovoz, H.ttsStyle(await H.holat(db), STAGES[st].tts)), emP]);
   return { ok: true, heard: text, text: out, speak: out, stage: st, pitch: PITCH[st], ...(a || {}) };
 }
 
@@ -409,10 +417,11 @@ Deno.serve(async (req) => {
   }
 
   // ---- GPS: rejalashtirilgan ishlar (cron) ----
-  if (action === "gps_tick" || action === "gps_hisobot") {
+  if (action === "gps_tick" || action === "gps_hisobot" || action === "xotira") {
     if (req.headers.get("x-setup-key") !== cfg?.hook_secret) return json({ ok: false }, 403);
     try {
-      if (action === "gps_tick") return json({ ok: true, ...(await G.tick(gd(), STAGES[stageOf(cfg)].uslub)) });
+      if (action === "xotira") return json({ ok: true, ...(await yigish(db, gemini)) });
+      if (action === "gps_tick") return json({ ok: true, ...(await G.tick(gd(), STAGES[stageOf(cfg)].uslub + "\n" + H.promptText(await H.holat(db)))) });
       return json(await G.report(gd(), new URL(req.url).searchParams.get("tur") || "kun"));
     } catch (e) { console.error(e); return json({ ok: false, error: String(e) }); }
   }
@@ -429,7 +438,7 @@ Deno.serve(async (req) => {
     }
     const me = await tg("getMe", {});
     const hook = await tg("setWebhook", { url: FN_URL, secret_token: cfg.hook_secret, allowed_updates: ["message"] });
-    await tg("setMyCommands", { commands: [{ command: "bugun", description: "Bugungi holat" }, { command: "ertaga", description: "Ertangi holat" }, { command: "qayerdaman", description: "Hozir qayerdaman" }, { command: "yol", description: "Bugungi yo'l hisoboti" }, { command: "ulash", description: "Telefon ilovasini ulash kodi" }, { command: "bosqich", description: "JARVISning hozirgi yosh bosqichi" }, { command: "tozala", description: "Suhbat tarixini tozalash" }] });
+    await tg("setMyCommands", { commands: [{ command: "bugun", description: "Bugungi holat" }, { command: "ertaga", description: "Ertangi holat" }, { command: "qayerdaman", description: "Hozir qayerdaman" }, { command: "yol", description: "Bugungi yo'l hisoboti" }, { command: "kayfiyat", description: "JARVISning hozirgi kayfiyati" }, { command: "ulash", description: "Telefon ilovasini ulash kodi" }, { command: "bosqich", description: "JARVISning hozirgi yosh bosqichi" }, { command: "tozala", description: "Suhbat tarixini tozalash" }] });
     await tg("setMyDescription", { description: "Zufarbekning shaxsiy yordamchisi. Faqat egasiga javob beradi." });
     return json({ ok: true, bot: me?.result?.username, hook });
   }
@@ -470,6 +479,7 @@ Deno.serve(async (req) => {
     else if (msg.text === "/ertaga") await handle(id, "Ertangi holatni qisqa ko'rsat: reja, uchrashuvlar, muddati ertaga bo'lgan vazifalar.");
     else if (msg.text === "/qayerdaman") await handle(id, "Hozir qayerdaman?");
     else if (msg.text === "/yol") await G.report(gd(), "kun");
+    else if (msg.text === "/kayfiyat") await tg("sendMessage", { chat_id: id, text: await H.korsat(db) });
     else if (msg.photo?.length) await handlePhoto(id, msg, Number(upd.update_id));
     else if (msg.document && /^image\//.test(msg.document.mime_type || "")) await handlePhoto(id, { ...msg, photo: [{ file_id: msg.document.file_id }] }, Number(upd.update_id));
     else if (msg.voice || msg.audio) {

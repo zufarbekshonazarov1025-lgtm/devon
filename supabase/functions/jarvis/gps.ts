@@ -259,6 +259,8 @@ export async function report(d: Deps, tur: string) {
     const { count: yangi } = await d.db.from("joylar").select("id", { count: "exact", head: true }).gte("yaratilgan", dan.toISOString()).lt("yaratilgan", end.toISOString());
     const dayKeys = new Set(vs.map((v) => ymd(new Date(v.boshlandi))));
     body += `\n\n📆 GPS bor kunlar: ${dayKeys.size}\n🆕 Yangi joylar: ${yangi ?? 0}`;
+    const { data: learned } = await d.db.from("bilim").select("matn").like("manba", "jarvis%").neq("mavzu", "joy").gte("yaratilgan", dan.toISOString()).lt("yaratilgan", end.toISOString()).order("yaratilgan").limit(12);
+    if (learned?.length) body += `\n\n🧠 Shu davrda siz haqingizda o'rganganlarim:\n${learned.map((b: any) => "• " + b.matn).join("\n")}`;
   }
   const text = `${title}\n\n${body}\n\n🚶 Yurilgan masofa: ${Number(km ?? 0)} km${unknown.size ? `\n❓ Nomi noma'lum joylar: ${unknown.size} ta — takrorlansa so'rayman.` : ""}`;
   await d.tg("sendMessage", { chat_id: d.ownerId, text });
