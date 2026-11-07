@@ -12,6 +12,8 @@ import android.content.Intent;
 public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context c, Intent i) {
+        // GPS fonda o'zi qayta yoqiladi (mikrofondan farqli, Android bunga ruxsat beradi)
+        if (Api.prefs(c).getBoolean("gps_on", true)) GpsService.start(c);
         if (!Api.prefs(c).getBoolean("enabled", false)) return;
         NotificationManager nm = c.getSystemService(NotificationManager.class);
         nm.createNotificationChannel(new NotificationChannel("jarvis_boot", "JARVIS ishga tushirish", NotificationManager.IMPORTANCE_HIGH));

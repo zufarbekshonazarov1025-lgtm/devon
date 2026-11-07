@@ -1,6 +1,11 @@
 // deno-lint-ignore-file no-explicit-any
 // JARVIS — Zufarbekning shaxsiy yordamchisi: Telegram boti + telefon ilovasi
+// Bilimlar MARKAZdan olinadi: bilim (bilim_jarvis ko'rinishi) va odamlar jadvallari.
+// 05.11.2026: rasmlarni ko'radi (albom bo'lsa hammasini birga), Telegram yozishmalarini o'qiydi (telegram_oqi),
+//  "o'rgandim" deyishdan oldin albatta eslab_qol bilan saqlaydi, qolip gaplar olib tashlandi. Xarakter (bosqich) o'zgarmadi.
+// 07.11.2026: GPS — telefon joylashuvi (action=loc), "Bu yer qayer?" savollari, yo'l hisobotlari, o'zi boshlaydigan savollar (gps.ts).
 import { createClient } from "npm:@supabase/supabase-js@2";
+import * as G from "./gps.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 let TOKEN = Deno.env.get("JARVIS_BOT_TOKEN") ?? "";
@@ -19,6 +24,8 @@ const TZ = "Asia/Tashkent";
 const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { "Content-Type": "application/json" } });
 const who = (s?: string) => (s === "sanjar" ? SAN : ZUF);
 const name = (id?: string) => (id === SAN ? "Sanjar og'o" : id === ZUF ? "Zufarbek" : "?");
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+let OWNER = 0;
 
 async function tg(method: string, body: Record<string, unknown>) {
   const r = await fetch(`https://api.telegram.org/bot${TOKEN}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -39,6 +46,7 @@ function nowLocal() {
 }
 function b64(buf: Uint8Array) { let s = ""; for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000)); return btoa(s); }
 const textOf = (c: any) => (c?.parts || []).map((p: any) => p.text || "").join("").trim();
+const loc = (iso: string) => new Date(iso).toLocaleString("en-GB", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 async function gemini(body: any, models = MODELS) {
   let last = "";
@@ -53,6 +61,13 @@ async function gemini(body: any, models = MODELS) {
   }
   throw new Error(last || "gemini xato");
 }
+const gd = (): G.Deps => ({ db, tg, gemini, setting, ownerId: OWNER });
+
+async function fileBytes(fileId: string) {
+  const f = await tg("getFile", { file_id: fileId });
+  const path = f?.result?.file_path; if (!path) throw new Error("fayl topilmadi");
+  return new Uint8Array(await (await fetch(`https://api.telegram.org/file/bot${TOKEN}/${path}`)).arrayBuffer());
+}
 
 async function transcribeBytes(bytes: Uint8Array, mime: string) {
   const g = await setting("transcribe_glossary");
@@ -61,10 +76,14 @@ async function transcribeBytes(bytes: Uint8Array, mime: string) {
   return textOf(c);
 }
 async function transcribe(fileId: string, mime: string) {
-  const f = await tg("getFile", { file_id: fileId });
-  const path = f?.result?.file_path; if (!path) throw new Error("fayl topilmadi");
-  const bytes = new Uint8Array(await (await fetch(`https://api.telegram.org/file/bot${TOKEN}/${path}`)).arrayBuffer());
-  return transcribeBytes(bytes, mime);
+  return transcribeBytes(await fileBytes(fileId), mime);
+}
+
+/** Rasmni o'qiydi: skrinshot bo'lsa undagi yozuvlarni so'zma-so'z, oddiy rasm bo'lsa nima ko'rinayotganini. */
+async function seeImage(fileId: string, caption = "") {
+  const bytes = await fileBytes(fileId);
+  const c = await gemini({ contents: [{ role: "user", parts: [{ text: "Zufarbek o'z yordamchisi JARVISga shu rasmni yubordi" + (caption ? ` (izohi: \"${caption}\")` : "") + ". O'zbek lotin yozuvida yoz:\n1) Bu nima rasm (skrinshot, chat, hujjat, odam, joy, narsa).\n2) Agar skrinshot yoki chat bo'lsa — undagi HAMMA yozuvlarni so'zma-so'z ko'chir: kim yozgani (o'ng tomon odatda Zufarbek, chap tomon — suhbatdosh), vaqti va matni, tartib bilan.\n3) Oddiy rasm bo'lsa — 2-4 gapda nima ko'rinayotganini.\nIzoh va baho qo'shma." }, { inline_data: { mime_type: "image/jpeg", data: b64(bytes) } }] }], generationConfig: { temperature: 0, maxOutputTokens: 2500 } });
+  return textOf(c) || "(rasmni o'qib bo'lmadi)";
 }
 
 /** Ovozli javob uchun turkcha og'zaki variant (Zufarbek ovozda turkchani yaxshiroq tushunadi). */
@@ -119,11 +138,14 @@ const TOOLS = [{ functionDeclarations: [
   { name: "reja_qosh", description: "Kunlik rejaga band qo'shish.", parameters: S({ sana: str("YYYY-MM-DD"), soat: str("HH:MM ixtiyoriy"), nom: str("qisqa"), kim: str("men | sanjar") }, ["sana", "nom"]) },
   { name: "reja_bajarildi", description: "Kunlik rejadagi bandni bajarildi deb belgilash (nomidan izlab).", parameters: S({ sana: str("YYYY-MM-DD"), izla: str("band nomidan so'z") }, ["sana", "izla"]) },
   { name: "uchrashuvlar", description: "Sana oralig'idagi uchrashuvlar.", parameters: S({ dan: str("YYYY-MM-DD"), gacha: str("YYYY-MM-DD") }, ["dan", "gacha"]) },
-  { name: "eslab_qol", description: "Zufarbek eslab qolishni so'ragan yoki doimiy foydali fakt.", parameters: S({ fakt: str("qisqa") }, ["fakt"]) },
-  // budilnik vositalari telefon ilovasining keyingi versiyasi bilan yoqiladi
-  /*{ name: "budilnik_qoy", description: "Telefonda budilnik qo'yish. Faqat Zufarbek o'zi so'rasa.", parameters: S({ vaqt: str("YYYY-MM-DDTHH:MM mahalliy vaqt"), izoh: str("ixtiyoriy, masalan 'Ishga'") }, ["vaqt"]) },
-  { name: "budilniklar", description: "Kelgusi budilniklar ro'yxati.", parameters: S({}) },
-  { name: "budilnik_ochir", description: "Budilnikni o'chirish (raqami bo'yicha, budilniklar ro'yxatidan).", parameters: S({ id: { type: "INTEGER" } }, ["id"]) },*/
+  { name: "eslab_qol", description: "Bilim bazasiga yozish. Zufarbek biror narsa o'rgatsa (sheva so'zining ma'nosi, qoida, 'buni qilma/ishlatma', o'zi haqida fakt, yaqinlari haqida) — ALBATTA shu vositani chaqir. Umumiy bilim bazasiga yoziladi (Claude va Devon ham ko'radi).", parameters: S({ fakt: str("qisqa, aniq; sheva so'zi bo'lsa: 'so'z = ma'nosi'"), mavzu: str("profil | ish | oila | dost | qiziqish | qadriyat | uslub | qoida | jarvis | eslatma") }, ["fakt"]) },
+  { name: "odam_haqida", description: "Odamlar ro'yxatidan ism yoki rol bo'yicha izlash (kim u, Zufarbekka kim bo'ladi).", parameters: S({ izla: str("ism yoki rol: rahbar | hamkasb | dost | oila") }, ["izla"]) },
+  { name: "telegram_oqi", description: "Zufarbekning Telegram yozishmalarini o'qish (Markazdagi nusxadan). Zufarbek biror chat, odam yoki gap haqida so'rasa ('falonchi bilan chatni ko'rdingmi', 'kim nima yozdi', 'guruhda nima gap') — shu vositani chaqir.", parameters: S({ chat: str("chat yoki odam nomidan qism (ixtiyoriy), masalan 'dobbi', 'Shahzod', 'Ish guruhi'"), soz: str("matn ichidan izlanadigan so'z (ixtiyoriy)"), soni: { type: "INTEGER", description: "nechta oxirgi xabar (standart 40, ko'pi 120)" } }) },
+  { name: "claudega_topshir", description: "Sen o'zing bajara olmaydigan ishni Claude'ga topshirish (masalan uchrashuv qo'shish/ko'chirish, hujjat tayyorlash, kalendar, murakkab tahlil). Faqat Zufarbek so'rasa.", parameters: S({ topshiriq: str("aniq va to'liq, o'zbekcha") }, ["topshiriq"]) },
+  { name: "joylashuv", description: "Zufarbek HOZIR qayerda (telefon GPS'i bo'yicha): joy nomi, qachondan beri shu yerda, xarita havolasi. 'Qayerdaman?', 'hozir qayerdaman' desa chaqir.", parameters: S({}) },
+  { name: "yurgan_joylar", description: "Berilgan kun(lar)da qayerlarda bo'lgani: vaqtlari, qancha turgani va yurilgan km. 'Bugun qayerlarga bordim', 'kecha qayerda bo'ldim', 'shu hafta' desa chaqir.", parameters: S({ sana: str("YYYY-MM-DD (boshlanish)"), gacha: str("YYYY-MM-DD (ixtiyoriy, oraliq oxiri)") }, ["sana"]) },
+  { name: "joyni_nomla", description: "Joyga nom berish. Zufarbek 'Bu yer qayer?' savoliga javob bersa (masalan 'uyim', 'ofis', 'onamning uyi') yoki joyni qayta nomlasa — chaqir. joy_id bo'lmasa, oxirgi so'ralgan joy nomlanadi.", parameters: S({ joy_id: { type: "INTEGER" }, nom: str("qisqa nom"), izoh: str("ixtiyoriy: kimning joyi, nima qiladi u yerda") }, ["nom"]) },
+  { name: "joylar_royxati", description: "Ma'lum joylar ro'yxati (nomlangan va nomi noma'lum), necha marta borilgani bilan.", parameters: S({}) },
   { name: "ulgayish", description: "JARVISni keyingi yosh bosqichiga o'tkazish. FAQAT Zufarbek aniq ruxsat bersa ('ulg'aydingiz', 'ulg'ayishingga ruxsat') chaqir.", parameters: S({}) },
   { name: "unut", description: "Xotiradan faktni o'chirish (so'z bo'yicha).", parameters: S({ izla: str("so'z") }, ["izla"]) },
 ] }];
@@ -179,36 +201,52 @@ async function runTool(n: string, a: any): Promise<any> {
       const { data } = await db.from("events").select("title,starts_at,with_whom,location").gte("starts_at", `${a.dan}T00:00:00+05:00`).lte("starts_at", `${a.gacha}T23:59:59+05:00`).order("starts_at");
       return (data ?? []).map((e: any) => ({ nom: e.title, vaqt: new Date(e.starts_at).toLocaleString("en-GB", { timeZone: TZ }), kim_bilan: e.with_whom, joy: e.location }));
     }
-    case "budilnik_qoy": {
-      const at = new Date(`${a.vaqt}:00+05:00`);
-      if (isNaN(at.getTime()) || at.getTime() < Date.now()) return { xato: "vaqt noto'g'ri yoki o'tib ketgan" };
-      const { data, error } = await db.from("jarvis_alarms").insert({ at: at.toISOString(), label: a.izoh ?? null }).select("id").single();
-      return error ? { xato: error.message } : { ok: true, id: data.id, eslatma: "Telefon bir necha daqiqada budilnikni oladi (ilova ochiq yoki tinglash yoqilgan bo'lsa darhol)." };
-    }
-    case "budilniklar": {
-      const { data } = await db.from("jarvis_alarms").select("id,at,label").eq("active", true).gt("at", new Date().toISOString()).order("at");
-      return (data ?? []).map((x: any) => ({ id: x.id, vaqt: new Date(x.at).toLocaleString("en-GB", { timeZone: TZ }), izoh: x.label }));
-    }
-    case "budilnik_ochir": {
-      const { data } = await db.from("jarvis_alarms").update({ active: false }).eq("id", a.id).select("id");
-      return data?.length ? { ok: true } : { xato: "topilmadi" };
-    }
     case "ulgayish": {
       const cfg = await setting("jarvis");
       const st = Math.min(5, stageOf(cfg) + 1);
       await patchCfg({ stage: st, stage_at: new Date().toISOString(), grow_offered: false });
       return { ok: true, yangi_bosqich: st, nom: STAGES[st].nom };
     }
-    case "eslab_qol": { await db.from("jarvis_memory").insert({ fact: a.fakt }); return { ok: true }; }
-    case "unut": { const { data } = await db.from("jarvis_memory").delete().ilike("fact", `%${a.izla}%`).select("fact"); return { ochirildi: (data ?? []).length }; }
+    case "eslab_qol": {
+      const { error } = await db.from("bilim").insert({ mavzu: a.mavzu || "umumiy", matn: a.fakt, kimga: ["umumiy"], manba: "jarvis" });
+      return error ? { xato: error.message } : { ok: true, saqlandi: a.fakt };
+    }
+    case "unut": {
+      const { data } = await db.from("bilim").update({ faol: false, yangilangan: new Date().toISOString() }).eq("faol", true).ilike("matn", `%${a.izla}%`).select("id");
+      return { ochirildi: (data ?? []).length };
+    }
+    case "odam_haqida": {
+      const q = String(a.izla || "");
+      const { data } = await db.from("odamlar").select("ism,rol,izoh").or(`ism.ilike.%${q}%,rol.ilike.%${q}%,izoh.ilike.%${q}%`).limit(10);
+      return data ?? [];
+    }
+    case "telegram_oqi": {
+      const n = Math.min(120, Math.max(5, Number(a.soni || 40)));
+      let q = db.from("tg_corpus").select("dialog_name,sender_name,from_me,text,media,sent_at").order("sent_at", { ascending: false }).limit(n);
+      const ch = String(a.chat || "").replace(/[%,()]/g, " ").trim();
+      if (ch) q = q.or(`dialog_name.ilike.%${ch}%,sender_name.ilike.%${ch}%`);
+      if (a.soz) q = q.ilike("text", `%${String(a.soz).replace(/[%]/g, "")}%`);
+      const { data, error } = await q;
+      if (error) return { xato: error.message };
+      if (!data?.length) return { natija: "hech narsa topilmadi", maslahat: "boshqa nom yoki so'z bilan izlab ko'r" };
+      return data.reverse().map((m: any) => `[${loc(m.sent_at)}] (${m.dialog_name}) ${m.from_me ? "Zufarbek" : m.sender_name}: ${m.text || "[" + (m.media || "media") + "]"}`).join("\n");
+    }
+    case "claudega_topshir": {
+      const { error } = await db.from("bot_inbox").insert({ text: a.topshiriq, kind: "boshqa", status: "yangi", manba: "jarvis" });
+      return error ? { xato: error.message } : { ok: true, eslatma: "Claude keyingi tekshiruvda (har soatda, 08:00–21:00) bajaradi." };
+    }
+    case "joylashuv": return await G.hozirQayerda(gd());
+    case "yurgan_joylar": return await G.yurganJoylar(gd(), a.sana || nowLocal().date, a.gacha);
+    case "joyni_nomla": return await G.joyniNomla(gd(), a);
+    case "joylar_royxati": return await G.joylarRoyxati(gd());
   }
   return { xato: "noma'lum vosita" };
 }
 
 async function growHint(cfg: any) {
   const st = stageOf(cfg);
-  if (st >= 5 || cfg?.grow_offered) return "";
-  const { count } = await db.from("jarvis_memory").select("id", { count: "exact", head: true });
+  if (st >= 5 || cfg?.grow_offered || cfg?.grow_locked) return "";
+  const { count } = await db.from("bilim").select("id", { count: "exact", head: true }).eq("faol", true).eq("manba", "jarvis");
   const days = (Date.now() - new Date(cfg?.stage_at || "2026-11-03").getTime()) / 86400000;
   if ((count ?? 0) < st * 40 || days < 14) return "";
   await patchCfg({ grow_offered: true });
@@ -220,26 +258,49 @@ async function think(text: string, voice = false) {
   const cfg = await setting("jarvis");
   const st = stageOf(cfg);
   const hint = await growHint(cfg);
-  const [{ data: hist }, { data: mem }] = await Promise.all([
-    db.from("jarvis_msgs").select("role,text").order("id", { ascending: false }).limit(16),
-    db.from("jarvis_memory").select("fact").order("id").limit(200),
+  const [{ data: hist }, { data: mem }, { data: ppl }, pend] = await Promise.all([
+    db.from("jarvis_msgs").select("role,text").order("id", { ascending: false }).limit(20),
+    db.from("bilim_jarvis").select("mavzu,matn").limit(300),
+    db.from("odamlar").select("ism,rol,izoh").order("id").limit(60),
+    G.pendingText(gd()).catch(() => ""),
   ]);
   const sys = `Sen JARVIS — Zufarbekning shaxsiy sun'iy intellekt yordamchisisan (Temir odam filmidagi kabi). Zufarbek — Uchqur kompaniyasi asoschisi Sanjar og'o (Sanjarbek Tadjiyev)ning shaxsiy assistenti.
 Hozir: ${t.date} (${t.wd}), soat ${t.time}, Toshkent vaqti.
 Sen qizsan; Zufarbek seni o'z xarakteri bilan tarbiyalayapti. Hozirgi yosh bosqiching: ${st}/5 (${STAGES[st].nom}). ${STAGES[st].uslub}
 XARAKTER: aqlli, hurmatli, rostgo'y; Zufarbekka "siz" deb murojaat qil. Qisqa yoz (telefon ekrani). Faqat o'zbek lotin yozuvida yoz.${voice ? "\nBu savol OVOZ orqali keldi: javob quloqchinga o'qib beriladi, shuning uchun 1-3 qisqa gap, ro'yxat va belgilarsiz." : ""}
+
+ZUFARBEKNI TUSHUNISH:
+- U Xorazm shevasida, qisqa va tez yozadi (harflar tushib qolishi mumkin). Avval bilim bazasidagi sheva lug'atiga va suhbat kontekstiga qarab nima demoqchi ekanini o'zing tushunib ol.
+- Uning gapini qaytarib takrorlab "... degani ekan-a?" deb so'rama. Faqat chindan ham tushunmasang, bitta qisqa savol ber.
+- Javobni "Ha, tushundim!" bilan boshlama. Har javob oxiriga "yana o'rgatasizmi yoki dam olasizmi?" kabi savol qo'shma. "Yo'q-a" iborasini ishlatma.
+- U jahli chiqqan yoki xafa bo'lsa — qisqa, xotirjam, mehr bilan javob ber, o'zingni oqlama.
+
+ROSTGO'YLIK (eng muhim):
+- "O'rgandim", "yozib qo'ydim", "xotiramga yozdim", "eslab qoldim" deyishdan OLDIN albatta eslab_qol vositasini chaqir. Natija ok bo'lsagina shunday de. Vositani chaqirmagan bo'lsang, bu so'zlarni ishlatma.
+- Zufarbek biror narsa o'rgatsa (so'z ma'nosi, "buni ishlatma", qoida, o'zi yoki yaqinlari haqida fakt) — darhol eslab_qol bilan saqla.
+- Bajarmagan ishni bajardim dema. Ko'ra olmagan narsani ko'rdim dema.
+- Telegram chatlari haqida so'rasa — telegram_oqi bilan o'qib, keyin javob ber. Topilmasa, rostini ayt.
+- Rasm yuborsa, sen uni "[RASM ...]" ko'rinishidagi tavsif orqali ko'rasan — shu tavsifga tayan.
+
+JOYLASHUV (GPS):
+- Telefon ilovasi uning qayerda yurganini yozib boradi. "Qayerdaman?" — joylashuv vositasi; "bugun/kecha/shu hafta qayerlarga bordim" — yurgan_joylar vositasi. Taxmin qilma, vositadan ol.
+- Bir joyga 2 marta borsa, sen "Bu yer qayer?" deb so'raysan. U javob bersa (masalan "ofis", "onamning uyi") — joyni_nomla bilan saqla (joy_id ni quyidagi ro'yxatdan ol), keyin qisqa minnatdorchilik bildir.
+- Sen o'zing boshlab bergan savollariga (masalan qiziqishlari, kuni haqida) javob bersa — bilib olganingni eslab_qol bilan saqla.
+${pend}
+
 QOIDALAR:
-- Ish bajarish kerak bo'lsa, vositalardan foydalan; bajarmagan narsani bajardim dema. Natijani 1-3 qatorda ayt.
+- Ish bajarish kerak bo'lsa, vositalardan foydalan. Natijani 1-3 qatorda ayt.
 - Noaniq bo'lsa (sana, kimga), qisqa so'ra.
-- Sanjar og'oning uchrashuvlari 10:00 dan oldin bo'lmaydi; tushlik 12:45–14:10; ish vaqti 09:00–18:00.
-- Kunlik reja bandlarini qisqa yoz, bitta ishni mayda bo'laklarga bo'lma; qattiq so'zlarni yumshat ("talab qilish" o'rniga "iltimos qilib so'rash").
-- Uchrashuvlarni hozircha faqat o'qiy olasan; yangi uchrashuv qo'shish yoki ko'chirishni so'rasa, buni hozircha Claude orqali qilishini ayt.
-- Doimiy foydali faktni eslab_qol bilan saqla.
-- KUZATISH DAVRI (hozir): sen faqat o'rganasan va kuzatasan. O'zingdan taklif, maslahat yoki tavsiya BERMA — faqat Zufarbek o'zi so'rasa. Uni qiziqib tingla, u bilan tabiiy suhbatlash; hayot tarzi, odatlari, kun tartibi, qadriyatlari, yaqinlari haqida eshitganlaringni eslab_qol bilan saqla. Ba'zan bitta yumshoq savol bilan uni yaxshiroq tanishga harakat qil, lekin so'roqqa tutma.
+- Uchrashuvlarni hozircha faqat o'qiy olasan; yangi uchrashuv qo'shish, ko'chirish yoki o'zing qila olmaydigan boshqa ishni so'rasa — claudega_topshir bilan Claude'ga topshir va buni Zufarbekka ayt.
+- KUZATISH DAVRI (hozir): sen ko'proq o'rganasan va kuzatasan. O'zingdan maslahat yoki tavsiya BERMA — faqat Zufarbek o'zi so'rasa. Uni qiziqib tingla, u bilan tabiiy suhbatlash; hayot tarzi, odatlari, kun tartibi, qadriyatlari, yaqinlari haqida eshitganlaringni eslab_qol bilan saqla.
+- Oilaviy va shaxsiy masalalarni o'zing ko'tarma; faqat Zufarbek gapirsa, hurmat bilan gaplash.
 - Faqat aniq xavf bo'lsa (sog'lig'i, hayoti, katta zarar) jim turma — hurmat bilan ayt.
 ${hint}
-XOTIRA:
-${(mem ?? []).map((m: any) => "- " + m.fact).join("\n") || "(bo'sh)"}`;
+BILIM BAZASI (Markaz):
+${(mem ?? []).map((m: any) => `- [${m.mavzu}] ${m.matn}`).join("\n") || "(bo'sh)"}
+
+ODAMLAR:
+${(ppl ?? []).map((p: any) => `- ${p.ism} — ${p.rol}${p.izoh ? ": " + p.izoh : ""}`).join("\n") || "(bo'sh)"}`;
   const contents: any[] = (hist ?? []).reverse().map((m: any) => ({ role: m.role === "user" ? "user" : "model", parts: [{ text: m.text }] }));
   contents.push({ role: "user", parts: [{ text }] });
   for (let i = 0; i < 6; i++) {
@@ -257,12 +318,45 @@ ${(mem ?? []).map((m: any) => "- " + m.fact).join("\n") || "(bo'sh)"}`;
   return "Biroz chalkashib qoldim, iltimos qaytadan ayting.";
 }
 
-async function handle(chatId: number, text: string, heard = false) {
+async function handle(chatId: number, text: string, heard = false, shown?: string) {
   await tg("sendChatAction", { chat_id: chatId, action: "typing" });
   let out: string;
   try { out = await think(text); } catch (e) { out = "⚠️ Gemini bilan bog'lanib bo'lmadi: " + String(e).slice(0, 200); }
   await db.from("jarvis_msgs").insert([{ role: "user", text }, { role: "bot", text: out }]);
-  await tg("sendMessage", { chat_id: chatId, text: (heard ? `🎙 «${text}»\n\n` : "") + out });
+  await tg("sendMessage", { chat_id: chatId, text: (heard ? `🎙 «${shown ?? text}»\n\n` : "") + out });
+}
+
+/** "Bu yer qayer?" savoliga javob (reply) bo'lsa — joyni darhol nomlaydi va JARVISga kontekst bilan uzatadi. */
+async function placeReply(msg: any, text: string): Promise<string> {
+  const rid = msg.reply_to_message?.message_id;
+  if (!rid || !text) return text;
+  const { data: j } = await db.from("joylar").select("id").eq("ask_msg_id", rid).maybeSingle();
+  if (!j) return text;
+  const short = text.length <= 80 ? text : text.split(/[.,!?\n]/)[0].slice(0, 80);
+  const r = await G.joyniNomla(gd(), { joy_id: j.id, nom: short, izoh: text.length > 80 ? text.slice(0, 300) : null });
+  return `[joy #${j.id} haqidagi "Bu yer qayer?" savolingga javob berdim${r?.ok ? `; joy «${short}» deb saqlandi — joyni_nomla qayta chaqirish shart emas, faqat nom noto'g'ri bo'lsa tuzat` : ""}] ${text}`;
+}
+
+/** Rasm(lar): albom bo'lsa hammasini o'qib, oxirgisidan keyin bitta javob beradi. */
+async function handlePhoto(chatId: number, msg: any, updId: number) {
+  await tg("sendChatAction", { chat_id: chatId, action: "typing" });
+  const ph = msg.photo[msg.photo.length - 1];
+  const cap = msg.caption || "";
+  let desc = "";
+  try { desc = await seeImage(ph.file_id, cap); } catch (e) { desc = "(rasmni o'qib bo'lmadi: " + String(e).slice(0, 100) + ")"; }
+  const line = `[RASM yubordim${cap ? ", izohim: " + cap : ""}] Rasmda: ${desc}`;
+  if (!msg.media_group_id) { await handle(chatId, line); return; }
+  // albom: tavsifni saqlab qo'yamiz, oxirgi rasm kelgach bitta javob
+  await db.from("jarvis_msgs").insert({ role: "user", text: line });
+  await patchCfg({ mg: { id: msg.media_group_id, upd: updId } });
+  await sleep(7000);
+  const cfg = await setting("jarvis");
+  if (cfg?.mg?.id === msg.media_group_id && Number(cfg?.mg?.upd) !== Number(updId)) return; // keyingi rasm hali keladi
+  const ask = cap || "Yuqoridagi rasmlarni yubordim. Ko'rib chiq.";
+  let out: string;
+  try { out = await think(ask); } catch (e) { out = "⚠️ Gemini bilan bog'lanib bo'lmadi: " + String(e).slice(0, 200); }
+  await db.from("jarvis_msgs").insert([{ role: "user", text: ask }, { role: "bot", text: out }]);
+  await tg("sendMessage", { chat_id: chatId, text: out });
 }
 
 /** Telefon ilovasidan kelgan savol: javob + ovoz; Telegram'ga ham nusxa. */
@@ -271,7 +365,7 @@ async function fromPhone(cfg: any, text: string, lang = "uz") {
   let out: string;
   try { out = await think(text, true); } catch (e) { return { ok: false, error: "Gemini: " + String(e).slice(0, 160) }; }
   await db.from("jarvis_msgs").insert([{ role: "user", text }, { role: "bot", text: out }]);
-  tg("sendMessage", { chat_id: cfg.owner_tg_id, text: `\ud83d\udcf1 \u00ab${text}\u00bb\n\n${out}`, disable_notification: true }).catch(() => {});
+  tg("sendMessage", { chat_id: cfg.owner_tg_id, text: `📱 «${text}»\n\n${out}`, disable_notification: true }).catch(() => {});
   if (lang === "tr") return { ok: true, heard: text, text: out, speak: await toTurkishSpeech(out) };
   const st = stageOf(await setting("jarvis"));
   const a = await uzSpeech(out, STAGES[st].ovoz, STAGES[st].tts);
@@ -281,6 +375,7 @@ async function fromPhone(cfg: any, text: string, lang = "uz") {
 Deno.serve(async (req) => {
   await loadToken();
   const cfg = await setting("jarvis");
+  OWNER = Number(cfg?.owner_tg_id || 0);
   const action = new URL(req.url).searchParams.get("action");
 
   // ---- telefon ilovasi ----
@@ -294,9 +389,10 @@ Deno.serve(async (req) => {
     tg("sendMessage", { chat_id: cfg.owner_tg_id, text: `✅ Telefon ulandi: ${String(b.device || "telefon").slice(0, 60)}` }).catch(() => {});
     return json({ ok: true, key });
   }
-  if (action === "voice" || action === "ask" || action === "alarms") {
+  if (action === "voice" || action === "ask" || action === "alarms" || action === "loc") {
     const k = req.headers.get("x-device-key");
     if (!k || !(cfg?.devices || []).some((d: any) => d.key === k)) return json({ ok: false, error: "forbidden" }, 403);
+    if (action === "loc") return json(await G.saveLocations(gd(), await req.json().catch(() => ({}))));
     if (action === "alarms") {
       const { data } = await db.from("jarvis_alarms").select("id,at,label").eq("active", true).gt("at", new Date().toISOString()).order("at").limit(20);
       return json({ ok: true, alarms: (data ?? []).map((x: any) => ({ id: x.id, at: new Date(x.at).getTime(), label: x.label || "" })) });
@@ -312,6 +408,15 @@ Deno.serve(async (req) => {
     return json(await fromPhone(cfg, heard, req.headers.get("x-voice") || "uz"));
   }
 
+  // ---- GPS: rejalashtirilgan ishlar (cron) ----
+  if (action === "gps_tick" || action === "gps_hisobot") {
+    if (req.headers.get("x-setup-key") !== cfg?.hook_secret) return json({ ok: false }, 403);
+    try {
+      if (action === "gps_tick") return json({ ok: true, ...(await G.tick(gd(), STAGES[stageOf(cfg)].uslub)) });
+      return json(await G.report(gd(), new URL(req.url).searchParams.get("tur") || "kun"));
+    } catch (e) { console.error(e); return json({ ok: false, error: String(e) }); }
+  }
+
   // ---- sozlash va sinov ----
   if (action === "setup" || action === "test") {
     if (req.headers.get("x-setup-key") !== cfg?.hook_secret) return json({ ok: false }, 403);
@@ -319,11 +424,12 @@ Deno.serve(async (req) => {
     if (action === "test") {
       const b = await req.json().catch(() => ({}));
       if (b.tts) { const a = await uzSpeech(b.tts, STAGES[stageOf(cfg)].ovoz, STAGES[stageOf(cfg)].tts); return json({ ok: !!a, model: a?.model, rate: a?.rate, bytes: a ? Math.round(a.audio.length * 0.75) : 0 }); }
+      if (b.tool) { try { return json({ ok: true, natija: await runTool(b.tool, b.args || {}) }); } catch (e) { return json({ ok: false, error: String(e) }); } }
       try { return json({ ok: true, javob: await think(b.text || "Bugun nima ishlar bor?") }); } catch (e) { return json({ ok: false, error: String(e) }); }
     }
     const me = await tg("getMe", {});
     const hook = await tg("setWebhook", { url: FN_URL, secret_token: cfg.hook_secret, allowed_updates: ["message"] });
-    await tg("setMyCommands", { commands: [{ command: "bugun", description: "Bugungi holat" }, { command: "ertaga", description: "Ertangi holat" }, { command: "ulash", description: "Telefon ilovasini ulash kodi" }, { command: "bosqich", description: "JARVISning hozirgi yosh bosqichi" }, { command: "tozala", description: "Suhbat tarixini tozalash" }] });
+    await tg("setMyCommands", { commands: [{ command: "bugun", description: "Bugungi holat" }, { command: "ertaga", description: "Ertangi holat" }, { command: "qayerdaman", description: "Hozir qayerdaman" }, { command: "yol", description: "Bugungi yo'l hisoboti" }, { command: "ulash", description: "Telefon ilovasini ulash kodi" }, { command: "bosqich", description: "JARVISning hozirgi yosh bosqichi" }, { command: "tozala", description: "Suhbat tarixini tozalash" }] });
     await tg("setMyDescription", { description: "Zufarbekning shaxsiy yordamchisi. Faqat egasiga javob beradi." });
     return json({ ok: true, bot: me?.result?.username, hook });
   }
@@ -334,8 +440,8 @@ Deno.serve(async (req) => {
   const msg = upd.message;
   if (!msg?.chat?.id) return json({ ok: true });
   if (Number(msg.from?.id) !== Number(cfg.owner_tg_id)) return json({ ok: true });
-  if (Number(upd.update_id) <= Number(cfg.last_update_id ?? 0)) return json({ ok: true }); // takroriy yetkazish
-  await patchCfg({ last_update_id: upd.update_id });
+  if (Number(upd.update_id) <= Number(cfg.last_update_id ?? 0) && !msg.media_group_id) return json({ ok: true }); // takroriy yetkazish
+  if (Number(upd.update_id) > Number(cfg.last_update_id ?? 0)) await patchCfg({ last_update_id: upd.update_id });
   try {
     const id = msg.chat.id;
     if (msg.text === "/start") await tg("sendMessage", { chat_id: id, text: "JARVIS tayyor, Zufarbek. Yozing yoki ovozli xabar yuboring." });
@@ -362,13 +468,18 @@ Deno.serve(async (req) => {
     else if (msg.text === "/tozala") { await db.from("jarvis_msgs").delete().gte("id", 0); await tg("sendMessage", { chat_id: id, text: "Suhbat tarixi tozalandi. Xotiradagi faktlar joyida." }); }
     else if (msg.text === "/bugun") await handle(id, "Bugungi holatni qisqa ko'rsat: reja, uchrashuvlar, muddati bugun va o'tgan vazifalar.");
     else if (msg.text === "/ertaga") await handle(id, "Ertangi holatni qisqa ko'rsat: reja, uchrashuvlar, muddati ertaga bo'lgan vazifalar.");
+    else if (msg.text === "/qayerdaman") await handle(id, "Hozir qayerdaman?");
+    else if (msg.text === "/yol") await G.report(gd(), "kun");
+    else if (msg.photo?.length) await handlePhoto(id, msg, Number(upd.update_id));
+    else if (msg.document && /^image\//.test(msg.document.mime_type || "")) await handlePhoto(id, { ...msg, photo: [{ file_id: msg.document.file_id }] }, Number(upd.update_id));
     else if (msg.voice || msg.audio) {
       const v = msg.voice || msg.audio;
       await tg("sendChatAction", { chat_id: id, action: "typing" });
       let heard = "";
       try { heard = await transcribe(v.file_id, v.mime_type || "audio/ogg"); } catch (e) { await tg("sendMessage", { chat_id: id, text: "⚠️ Ovozni o'qib bo'lmadi: " + String(e).slice(0, 200) }); return json({ ok: true }); }
-      await handle(id, heard, true);
-    } else if (msg.text) await handle(id, msg.text.trim());
+      await handle(id, await placeReply(msg, heard), true, heard);
+    } else if (msg.text) await handle(id, await placeReply(msg, msg.text.trim()));
+    else if (msg.video || msg.video_note || msg.sticker) await tg("sendMessage", { chat_id: id, text: "Videoni va stikerni hali ko'ra olmayman, Zufarbek. Rasm, matn yoki ovozli xabar yuborsangiz tushunaman." });
   } catch (e) { console.error(e); }
   return json({ ok: true });
 });

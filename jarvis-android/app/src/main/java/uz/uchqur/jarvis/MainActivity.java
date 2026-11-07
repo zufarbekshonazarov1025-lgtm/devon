@@ -34,6 +34,8 @@ public class MainActivity extends Activity {
     private TextView statusV, lastV;
     private Button toggle;
     private LinearLayout pairBox;
+    private TextView gpsV;
+    private Switch gpsSw;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -63,7 +65,7 @@ public class MainActivity extends Activity {
         pairBox.addView(code);
         Button pb = btn("Ulash", true);
         pb.setOnClickListener(v -> new Thread(() -> {
-            try { Api.pair(this, code.getText().toString()); runOnUiThread(this::refresh); }
+            try { Api.pair(this, code.getText().toString()); runOnUiThread(() -> { refresh(); askGps(); }); }
             catch (Exception e) { runOnUiThread(() -> lastV.setText("⚠️ " + e.getMessage())); }
         }).start());
         pairBox.addView(pb);
@@ -106,6 +108,23 @@ public class MainActivity extends Activity {
         lastCard.addView(lastV);
         root.addView(lastCard);
 
+        // --- joylashuv (GPS) ---
+        LinearLayout gps = card();
+        gps.addView(tv("📍 Joylashuv", 17, TXT));
+        gps.addView(tv("JARVIS qayerlarda yurganingizni yozib boradi: kunlik, haftalik va oylik hisobot qiladi, yangi joylar haqida «Bu yer qayer?» deb so'raydi.", 13, MUTED));
+        gpsSw = new Switch(this);
+        gpsSw.setText("Joylashuvni yozish"); gpsSw.setTextColor(TXT);
+        gpsSw.setChecked(p.getBoolean("gps_on", true) && GpsService.hasPerm(this));
+        gpsSw.setOnCheckedChangeListener((x, on) -> {
+            p.edit().putBoolean("gps_on", on).apply();
+            if (on) askGps(); else GpsService.stop(this);
+            gpsSw.postDelayed(this::refreshGps, 800);
+        });
+        gps.addView(gpsSw);
+        gpsV = tv("", 13, MUTED);
+        gps.addView(gpsV);
+        root.addView(gps);
+
         // --- sozlamalar ---
         LinearLayout set = card();
         set.addView(tv("Sozlamalar", 17, TXT));
@@ -147,6 +166,7 @@ public class MainActivity extends Activity {
 
         JarvisService.listener = (s, l) -> { statusV.setText(s); if (!l.isEmpty()) lastV.setText(l); refreshToggle(); };
         refresh();
+        if (!Api.key(this).isEmpty() && p.getBoolean("gps_on", true)) { if (GpsService.hasPerm(this) && hasBgLoc()) GpsService.start(this); else askGps(); }
         if (p.getBoolean("enabled", false) && !JarvisService.running && hasMic() && !Api.key(this).isEmpty()) JarvisService.start(this, null);
     }
 
@@ -160,7 +180,38 @@ public class MainActivity extends Activity {
         toggle.postDelayed(() -> JarvisService.start(this, null), 1200);
     }
 
+    private boolean hasBgLoc() { return checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED; }
+
+    /** Avval «ilova ishlayotganda», keyin «har doim» ruxsati (Android buni ikki bosqichda so'raydi). */
+    private void askGps() {
+        if (Api.key(this).isEmpty()) return;
+        if (!GpsService.hasPerm(this)) {
+            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 2);
+            return;
+        }
+        if (!hasBgLoc()) {
+            lastV.setText("📍 Keyingi oynada «Har doim ruxsat berish» (Allow all the time)ni tanlang — shunda ekran o'chiq bo'lsa ham joylashuv yoziladi.");
+            requestPermissions(new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION}, 3);
+            return;
+        }
+        GpsService.start(this);
+    }
+
+    private void refreshGps() {
+        if (gpsV == null) return;
+        boolean on = Api.prefs(this).getBoolean("gps_on", true);
+        String s;
+        if (!on) s = "O'chiq.";
+        else if (!GpsService.hasPerm(this)) s = "Joylashuv ruxsati berilmagan.";
+        else if (!hasBgLoc()) s = "⚠️ «Har doim ruxsat berish» kerak — aks holda ekran o'chganda yozilmaydi. Yoqish uchun tugmani qayta bosing.";
+        else if (!GpsService.running) s = "Ishga tushmoqda…";
+        else s = "Ishlayapti. Oxirgi nuqta: " + (GpsService.lastFix == 0 ? "hali yo'q (GPS yoqilganini tekshiring)" : new java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(new java.util.Date(GpsService.lastFix)))
+                + (GpsService.pending > 0 ? " · yuborilishi kutilmoqda: " + GpsService.pending : " · hammasi serverda");
+        gpsV.setText(s);
+    }
+
     private void refresh() {
+        refreshGps();
         boolean paired = !Api.key(this).isEmpty();
         pairBox.setVisibility(paired ? View.GONE : View.VISIBLE);
         statusV.setText(paired ? JarvisService.status : "Ulanmagan");
@@ -187,6 +238,12 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int c, String[] perms, int[] res) {
+        if (c == 2 || c == 3) {
+            if (c == 2 && GpsService.hasPerm(this)) askGps();
+            else if (c == 3) GpsService.start(this);
+            gpsV.postDelayed(this::refreshGps, 800);
+            return;
+        }
         if (hasMic()) { Api.prefs(this).edit().putBoolean("enabled", true).apply(); JarvisService.start(this, null); toggle.postDelayed(this::refresh, 600); }
         else lastV.setText("Mikrofon ruxsatisiz JARVIS eshita olmaydi.");
     }
@@ -199,7 +256,12 @@ public class MainActivity extends Activity {
         for (Intent i : tries) { try { startActivity(i); lastV.setText("1) Avtozapusk: JARVIS'ni yoqing.\n2) Ilova sozlamalari → Batareya → «Cheklovsiz».\n3) «Foydalanilmasa to'xtatish»ni o'chiring."); return; } catch (Exception ignored) { } }
     }
 
-    @Override protected void onResume() { super.onResume(); refresh(); }
+    @Override protected void onResume() {
+        super.onResume();
+        if (Api.prefs(this).getBoolean("gps_on", true) && GpsService.hasPerm(this) && !GpsService.running) GpsService.start(this);
+        refresh();
+        if (gpsV != null) gpsV.postDelayed(this::refreshGps, 1500);
+    }
     @Override protected void onDestroy() { JarvisService.listener = null; super.onDestroy(); }
 
     // --- kichik yordamchilar ---

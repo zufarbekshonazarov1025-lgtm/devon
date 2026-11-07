@@ -62,6 +62,11 @@ public class Api {
         return post("ask", key(c), "application/json", new JSONObject().put("text", text).toString().getBytes("UTF-8"));
     }
 
+    /** Joylashuv nuqtalarini yuborish. */
+    static JSONObject loc(Context c, JSONObject body) throws Exception {
+        return post("loc", key(c), "application/json", body.toString().getBytes("UTF-8"));
+    }
+
     static byte[] wav(short[] pcm, int n) {
         int dataLen = n * 2;
         ByteBuffer b = ByteBuffer.allocate(44 + dataLen).order(ByteOrder.LITTLE_ENDIAN);
