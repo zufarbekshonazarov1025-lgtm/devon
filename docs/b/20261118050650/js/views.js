@@ -179,6 +179,17 @@ async function acceptResult(t) {
   if (await updateTask(t.id, { status: 'bajarildi', closed_at: new Date().toISOString() }, 'Qabul qilindi, tarixga o\'tdi'))
     notify(t.assignee_id, 'qabul', 'Ishingiz qabul qilindi', t.title, t.id);
 }
+async function closeByLead(t) {
+  const result = await ask({ title: 'Bajarildi deb yopish', label: 'Natija (ixtiyoriy)', value: t.result || '', required: false, ok: 'Yopish' });
+  if (result == null) return;
+  const now = new Date().toISOString();
+  const patch = { status: 'bajarildi', closed_at: now, submitted_at: t.submitted_at || now, accepted_at: t.accepted_at || now };
+  if (result.trim()) patch.result = result.trim();
+  if (await updateTask(t.id, patch, 'Rahbar bajarildi deb yopdi')) {
+    celebrate('done');
+    notify(t.assignee_id, 'qabul', 'Topshiriq bajarildi deb yopildi', t.title, t.id);
+  }
+}
 async function returnTask(t) {
   const reason = await ask({ title: 'Qaytarish sababi', label: 'Nimani tuzatish kerak', ok: 'Qaytarish' });
   if (reason == null) return;
@@ -188,7 +199,9 @@ async function returnTask(t) {
 }
 
 // ---------- Ishlar ro'yxati ----------
-const F = { who: 'all', show: 'open', q: '' };
+const F = { who: 'all', show: 'open', q: '', dep: 'all' };
+const BOLIM = ['IT', 'HR', 'Boshqa'];
+const bolimOf = (t) => (BOLIM.includes(t.bolim) ? t.bolim : 'Boshqa');
 const VIEWS = {
   open: { title: 'Ishlar', sub: 'Ochiq, muddati yaqini tepada', test: (t) => isOpen(t) },
   all: { title: 'Jami', sub: 'Hamma topshiriqlar', test: () => true },
@@ -212,6 +225,8 @@ export function Tasks() {
   if (F.who === 'ot' && ot) rows = rows.filter((t) => t.assignee_id === ot.id);
   if (F.who === 'wait') rows = rows.filter((t) => t.status === 'kutilmoqda' || t.status === 'tekshiruvda');
   if (q) rows = rows.filter((t) => [t.title, t.description, t.result, t.purpose].some((x) => (x || '').toLowerCase().includes(q)));
+  const depBase = rows;
+  if (F.dep !== 'all') rows = rows.filter((t) => bolimOf(t) === F.dep);
   const byClosed = (a, b) => (b.closed_at || b.updated_at).localeCompare(a.closed_at || a.updated_at);
   rows.sort((a, b) => (isOpen(a) !== isOpen(b) ? (isOpen(a) ? -1 : 1) : isOpen(a) ? byDue(a, b) : byClosed(a, b)));
 
@@ -222,6 +237,11 @@ export function Tasks() {
   return h('main', { class: 'view tasks' },
     Head(`${V.sub} · ${rows.length} ta`, V.title,
       h('a', { class: 'btn pill small', href: '#/ishlar/yangi' }, '+ Yangi')),
+    h('div', { class: 'seg', role: 'group', 'aria-label': 'Bo\'lim', style: 'margin-bottom:10px' },
+      [['all', 'Hammasi'], ...BOLIM.map((b) => [b, b])].map(([k, l]) => {
+        const n = k === 'all' ? depBase.length : depBase.filter((t) => bolimOf(t) === k).length;
+        return h('button', { type: 'button', class: F.dep === k ? 'on' : '', 'aria-pressed': String(F.dep === k), onclick: () => { F.dep = k; bus.render(); } }, `${l} · ${n}`);
+      })),
     h('label', { class: 'search' }, icon('search', 18, '#56645F'), input),
     h('div', { class: 'filters' },
       chip('who', 'all', 'Hammasi'), chip('who', 'me', 'Menga'), ot && chip('who', 'ot', nameOf(ot.id, true) + 'ga'), chip('who', 'wait', 'Kutilmoqda'),
@@ -266,6 +286,7 @@ export function TaskForm(id) {
         .map(([n, l]) => h('option', { value: n, selected: v.level === n }, l))),
     wait: h('input', { class: 'input', id: 'f_wait', list: 'contacts', value: (S.contacts.find((c) => c.id === v.waiting_on) || {}).name || '', placeholder: 'Ism' }),
     priv: h('input', { type: 'checkbox', id: 'f_priv', checked: !!v.is_private }),
+    bolim: h('select', { class: 'input', id: 'f_bolim' }, BOLIM.map((b) => h('option', { value: b, selected: (v.bolim || 'Boshqa') === b }, b))),
     quad: h('select', { class: 'input', id: 'f_quad' }, h('option', { value: '' }, 'Belgilanmagan'),
       [1, 2, 3, 4].map((n) => h('option', { value: n, selected: v.quadrant === n }, QUAD[n].label))),
   };
@@ -287,7 +308,7 @@ export function TaskForm(id) {
         else { const { data, error } = await sb.from('contacts').insert({ name: wname, created_by: S.me.id }).select().single(); if (!error) { waiting_on = data.id; S.contacts.push(data); } }
       }
       const row = { title, assignee_id: f.assignee.value, due_date: f.due.value, description: f.desc.value.trim() || null, purpose: f.purpose.value.trim() || null,
-        level: f.level.value ? Number(f.level.value) : null, waiting_on, is_private: f.priv.checked, quadrant: f.quad.value ? Number(f.quad.value) : null };
+        level: f.level.value ? Number(f.level.value) : null, waiting_on, is_private: f.priv.checked, quadrant: f.quad.value ? Number(f.quad.value) : null, bolim: f.bolim.value };
       let res;
       if (t) res = await sb.from('tasks').update(row).eq('id', t.id).select().single();
       else {
@@ -303,6 +324,7 @@ export function TaskForm(id) {
       fld('Nima ish', f.title, true),
       fld('Kim bajaradi', f.assignee, true),
       fld('Qachongacha', f.due, true),
+      fld('Bo\'lim', f.bolim),
       fld('Guruh (Eyzenxauer matritsasi)', f.quad),
       fld('Izoh', f.desc),
       fld('Nima uchun (maqsad)', f.purpose),
@@ -329,6 +351,8 @@ export function TaskDetail(id) {
   if (mineToDo && t.status === 'kutilmoqda') actions.push(h('button', { class: 'btn ghost', onclick: () => setWaiting(t) }, 'Kimdan kutilayotganini o\'zgartirish'));
   if (mineToDo && ['yangi', 'jarayonda', 'kutilmoqda'].includes(t.status)) actions.push(h('button', { class: 'btn', onclick: () => submitTask(t) }, 'Bajarildi'));
   if (t.status === 'tekshiruvda' && iGave && !mineToDo) actions.push(h('button', { class: 'btn', onclick: () => acceptResult(t) }, 'Qabul qilish'), h('button', { class: 'btn ghost', onclick: () => returnTask(t) }, 'Qaytarish'));
+  // Rahbar yordamchining istalgan ochiq topshirig'ini (o'zi bermagan bo'lsa ham) bajarildi deb yopa oladi.
+  if (S.me.kind === 'rahbar' && isOpen(t) && !mineToDo && !(t.status === 'tekshiruvda' && iGave)) actions.push(h('button', { class: 'btn', onclick: () => closeByLead(t) }, 'Bajarildi deb yopish'));
 
   const manage = [];
   if (isOpen(t) && mineToDo && !iGave) manage.push(h('button', { class: 'btn ghost small', onclick: () => askReschedule(t) }, 'Muddatni ko\'chirish'));
