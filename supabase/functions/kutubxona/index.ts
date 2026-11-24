@@ -184,6 +184,12 @@ function linkSeesDoc(link: Link, all: Bolim[], d: { id: string; bolim_id: string
   return linkSeesBolim(link, all, d.bolim_id);
 }
 
+/** Havola egasiga ko'rsatiladigan qism: fayl serverdan yuklanadimi (fayl) yoki faqat tashqi havola bormi (url). */
+function pub(d: Record<string, unknown>, all: Bolim[]) {
+  const { drive_file_id, drive_url, deleted_at: _x, ...rest } = d;
+  return { ...rest, bolim: fullName(all, d.bolim_id as string), fayl: !!drive_file_id, url: drive_file_id ? null : (drive_url ?? null) };
+}
+
 // ---------------- 1) Devon foydalanuvchilari ----------------
 async function userAction(req: Request, user: { id: string; isAdmin: boolean; name: string }, body: Record<string, unknown>) {
   const action = String(body.action ?? "");
@@ -272,8 +278,8 @@ async function linkAction(req: Request, body: Record<string, unknown>) {
     await jurnal({ ...aktor, amal: "kirdi" });
     let doc = null;
     if (link.hujjat_id) {
-      const { data } = await admin.from("kutubxona_hujjatlar").select("id,nom,tavsif,xulosa,mime,hajm,updated_at,bolim_id,holat,deleted_at").eq("id", link.hujjat_id).maybeSingle();
-      if (data && linkSeesDoc(link, all, data)) doc = { ...data, bolim: fullName(all, data.bolim_id) };
+      const { data } = await admin.from("kutubxona_hujjatlar").select("id,nom,tavsif,xulosa,mime,hajm,updated_at,bolim_id,holat,deleted_at,drive_file_id,drive_url").eq("id", link.hujjat_id).maybeSingle();
+      if (data && linkSeesDoc(link, all, data)) doc = pub(data, all);
     }
     const seen = link.hujjat_id ? [] : all.filter((b) => linkSeesBolim(link, all, b.id)).map((b) => ({ id: b.id, nom: b.nom, ota_id: b.ota_id }));
     return json(req, { havola: { nom: link.nom, tur: link.tur, muddat: link.muddat }, bolimlar: seen, hujjat: doc });
@@ -288,15 +294,15 @@ async function linkAction(req: Request, body: Record<string, unknown>) {
       const ids = (data ?? []).map((x: { id: string }) => x.id);
       const parcha = new Map((data ?? []).map((x: { id: string; parcha: string }) => [x.id, x.parcha]));
       if (ids.length) {
-        const { data: ds } = await admin.from("kutubxona_hujjatlar").select("id,nom,tavsif,xulosa,mime,hajm,updated_at,bolim_id,holat,deleted_at").in("id", ids);
+        const { data: ds } = await admin.from("kutubxona_hujjatlar").select("id,nom,tavsif,xulosa,mime,hajm,updated_at,bolim_id,holat,deleted_at,drive_file_id,drive_url").in("id", ids);
         rows = (ds ?? []).map((d) => ({ ...d, parcha: parcha.get(d.id) ?? null })).sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
       }
     } else {
-      let s = admin.from("kutubxona_hujjatlar").select("id,nom,tavsif,xulosa,mime,hajm,updated_at,bolim_id,holat,deleted_at").is("deleted_at", null).eq("holat", "tasdiqlangan").order("updated_at", { ascending: false }).limit(300);
+      let s = admin.from("kutubxona_hujjatlar").select("id,nom,tavsif,xulosa,mime,hajm,updated_at,bolim_id,holat,deleted_at,drive_file_id,drive_url").is("deleted_at", null).eq("holat", "tasdiqlangan").order("updated_at", { ascending: false }).limit(300);
       if (bolim) s = s.in("bolim_id", [bolim, ...all.filter((b) => b.ota_id === bolim).map((b) => b.id)]);
       rows = (await s).data ?? [];
     }
-    const out = rows.filter((d) => linkSeesDoc(link, all, d as never)).map((d) => ({ ...d, bolim: fullName(all, d.bolim_id as string), deleted_at: undefined }));
+    const out = rows.filter((d) => linkSeesDoc(link, all, d as never)).map((d) => pub(d, all));
     if (q) await jurnal({ ...aktor, amal: "qidirdi", tafsilot: { q } });
     return json(req, { hujjatlar: out });
   }

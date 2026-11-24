@@ -96,9 +96,10 @@ h2{font-size:16px;margin:8px 4px 0}
       h('div', { class: 'm' }, [d.bolim, date(d.updated_at), size(d.hajm)].filter(Boolean).join(' · ')),
       d.parcha ? h('div', { class: 'm', style: 'font-size:13px', html: esc(d.parcha).replace(/«/g, '<mark>').replace(/»/g, '</mark>') })
         : (d.tavsif || d.xulosa) ? h('div', { class: 'm', style: 'font-size:13px' }, d.tavsif || d.xulosa) : null,
-      h('div', { class: 'row' },
+      d.fayl ? h('div', { class: 'row' },
         h('a', { class: 'btn', href: fileUrl(d.id, false), target: '_blank', rel: 'noopener' }, 'Ochish'),
-        h('a', { class: 'btn ghost', href: fileUrl(d.id, true) }, 'Yuklab olish')));
+        h('a', { class: 'btn ghost', href: fileUrl(d.id, true) }, 'Yuklab olish'))
+      : d.url ? h('div', { class: 'row' }, h('a', { class: 'btn ghost', href: d.url, target: '_blank', rel: 'noopener' }, 'Havolani ochish'), h('span', { class: 'm', style: 'align-self:center' }, 'Google ruxsati kerak bo\'lishi mumkin')) : null);
   }
 
   async function list(box) {
