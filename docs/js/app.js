@@ -5,6 +5,7 @@ import { loadMore, applyTheme, Notifications, MySettings, FromText, navItems, na
 import { Money, MoneySettings, Debts, DebtDetail } from './money.js';
 import { driveReturn } from './files.js';
 import { Stats } from './stats.js';
+import { Library, LibraryDoc } from './kutubxona.js';
 import { registerDevice } from './native.js';
 import { Login, NoProfile, Home, Tasks, TaskForm, TaskDetail, Approvals, Soon, More, Trash, needsMe } from './views.js';
 
@@ -97,6 +98,8 @@ function route() {
   if (hash === '#/pullar/sozlama') return [MoneySettings(), '#/pullar'];
   if (hash === '#/pullar/qarzlar') return [Debts(), '#/pullar'];
   if ((m = hash.match(/^#\/pullar\/qarz\/([0-9a-f-]+)$/))) return [DebtDetail(m[1]), '#/pullar'];
+  if (hash === '#/kutubxona') return [Library(), hash];
+  if ((m = hash.match(/^#\/kutubxona\/h\/([0-9a-f-]+)$/))) return [LibraryDoc(m[1]), '#/kutubxona'];
   if (hash === '#/yana') return [More(), hash];
   if (hash === '#/savat') return [Trash(), '#/yana'];
   location.hash = '#/bugun';

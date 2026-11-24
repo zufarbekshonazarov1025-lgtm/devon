@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B6B58">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Uchqur kutubxonasi</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<style>
+:root{--bg:#F4F7F6;--card:#fff;--ink:#14201D;--muted:#56645F;--line:#D9E0DD;--soft:#E3E9E6;--brand:#0B6B58;--brand-dark:#084F41;--brand-tint:#E2F1EC;--red:#B42318;--amber:#9A5B00;--amber-tint:#FDF1DC}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:'Onest',system-ui,sans-serif;font-size:15px}
+.wrap{max-width:760px;margin:0 auto;padding:16px 16px 48px;display:flex;flex-direction:column;gap:12px}
+header{display:flex;align-items:center;gap:12px;padding:8px 0}
+header svg{flex:none}
+header b{font-size:20px;display:block}
+header small{color:var(--muted);font-size:13px}
+.card{background:var(--card);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.t{font-weight:600;font-size:15px;overflow-wrap:anywhere}
+.m{font-size:12px;color:var(--muted)}
+.btn{min-height:44px;padding:0 16px;border:none;border-radius:12px;background:var(--brand);color:#fff;font:inherit;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
+.btn.ghost{background:var(--card);color:var(--ink);border:1px solid #C5CFCB}
+.btn[disabled]{opacity:.55}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.input{width:100%;min-height:46px;padding:10px 12px;border:1px solid #C5CFCB;border-radius:12px;background:var(--card);font:inherit;outline:none}
+.input:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(11,107,88,.15)}
+label{font-weight:600;font-size:13px}
+.field{display:flex;flex-direction:column;gap:6px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{min-height:40px;padding:0 14px;border:1px solid var(--line);border-radius:20px;background:var(--card);font:inherit;font-weight:600;font-size:13px;white-space:nowrap;cursor:pointer}
+.chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.empty{background:var(--card);border-radius:16px;padding:22px 16px;text-align:center;color:var(--muted);font-size:14px}
+.err{color:var(--red);font-size:13px;font-weight:600}
+.ok{background:var(--brand-tint);color:var(--brand-dark);border-radius:12px;padding:12px;font-weight:600;font-size:14px}
+.bar{height:8px;border-radius:4px;background:var(--soft);overflow:hidden}.bar>div{height:100%;background:var(--brand);width:0;transition:width .2s}
+mark{background:#FFF1B8;color:inherit;border-radius:3px;padding:0 2px}
+h2{font-size:16px;margin:8px 4px 0}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="empty">Yuklanmoqda…</div></div>
+<script>
+(() => {
+  const API = 'https://wjqxqswmpxsaodcnjsrf.supabase.co/functions/v1/kutubxona';
+  const token = decodeURIComponent((location.hash || '').slice(1)).trim();
+  const app = document.getElementById('app');
+  const S = { info: null, bolim: '', q: '', ism: '' };
+  try { S.ism = localStorage.getItem('kutubxona_ism') || ''; } catch (e) {}
+
+  function h(tag, attrs, ...kids) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v == null || v === false) continue;
+      if (k === 'class') el.className = v; else if (k === 'html') el.innerHTML = v;
+      else if (k.startsWith('on')) el.addEventListener(k.slice(2), v); else if (k === 'value') el.value = v;
+      else el.setAttribute(k, v === true ? '' : v);
+    }
+    for (const c of kids.flat(Infinity)) if (c != null && c !== false) el.append(c.nodeType ? c : document.createTextNode(String(c)));
+    return el;
+  }
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const date = (s) => { if (!s) return ''; const [y, m, d] = s.slice(0, 10).split('-'); return `${d}.${m}.${y}`; };
+  const size = (n) => (!n ? '' : n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1)} MB`);
+  async function api(body) {
+    const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, t: token, ism: S.ism }) });
+    let j = {}; try { j = await r.json(); } catch (e) {}
+    if (!r.ok) throw new Error(j.error || 'Server bilan bog\'lanib bo\'lmadi');
+    return j;
+  }
+  const fileUrl = (id, dl) => `${API}?t=${encodeURIComponent(token)}&d=${id}&i=${encodeURIComponent(S.ism)}${dl ? '&dl=1' : ''}`;
+  const logo = '<svg width="40" height="40" viewBox="0 0 120 120" aria-hidden="true"><rect width="120" height="120" rx="28" fill="#0B6B58"/><rect x="28" y="30" width="28" height="60" rx="5" fill="#fff"/><rect x="64" y="30" width="28" height="60" rx="5" fill="#fff"/><rect x="56" y="26" width="8" height="68" rx="4" fill="#E3B341"/></svg>';
+  const head = (sub) => h('header', { html: logo }, h('div', {}, h('b', {}, 'Uchqur kutubxonasi'), h('small', {}, sub)));
+
+  function fail(msg) { app.replaceChildren(head(''), h('div', { class: 'empty' }, msg)); }
+
+  function askName() {
+    const inp = h('input', { class: 'input', id: 'ism', placeholder: 'Masalan: Otajon Rahimov', value: S.ism, autocomplete: 'name' });
+    const err = h('div', { class: 'err' });
+    const go = () => { const v = inp.value.trim(); if (v.length < 2) { err.textContent = 'Ismingizni yozing'; return; } S.ism = v; try { localStorage.setItem('kutubxona_ism', v); } catch (e) {} start(); };
+    app.replaceChildren(head('Hujjatlarni ko\'rish uchun'),
+      h('section', { class: 'card' }, h('div', { class: 'field' }, h('label', { for: 'ism' }, 'Ismingiz'), inp),
+        h('div', { class: 'm' }, 'Ism faqat kim kirganini bilish uchun so\'raladi.'), err,
+        h('button', { class: 'btn', onclick: go }, 'Davom etish')));
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    inp.focus();
+  }
+
+  function docCard(d) {
+    return h('article', { class: 'card' },
+      h('div', { class: 't' }, d.nom),
+      h('div', { class: 'm' }, [d.bolim, date(d.updated_at), size(d.hajm)].filter(Boolean).join(' · ')),
+      d.parcha ? h('div', { class: 'm', style: 'font-size:13px', html: esc(d.parcha).replace(/«/g, '<mark>').replace(/»/g, '</mark>') })
+        : (d.tavsif || d.xulosa) ? h('div', { class: 'm', style: 'font-size:13px' }, d.tavsif || d.xulosa) : null,
+      h('div', { class: 'row' },
+        h('a', { class: 'btn', href: fileUrl(d.id, false), target: '_blank', rel: 'noopener' }, 'Ochish'),
+        h('a', { class: 'btn ghost', href: fileUrl(d.id, true) }, 'Yuklab olish')));
+  }
+
+  async function list(box) {
+    box.replaceChildren(h('div', { class: 'm' }, 'Yuklanmoqda…'));
+    try {
+      const r = await api({ action: 'h_list', q: S.q, bolim: S.bolim || null });
+      box.replaceChildren(...(r.hujjatlar.length ? r.hujjatlar.map(docCard) : [h('div', { class: 'empty' }, S.q ? 'Hech narsa topilmadi. Boshqa so\'z bilan urinib ko\'ring.' : 'Bu bo\'limda hujjat yo\'q.')]));
+    } catch (e) { box.replaceChildren(h('div', { class: 'err' }, e.message)); }
+  }
+
+  function uploadBox() {
+    const info = S.info, opts = info.bolimlar;
+    const sel = opts.length > 1 ? h('select', { class: 'input', id: 'ub' }, opts.map((b) => h('option', { value: b.id }, (b.ota_id ? opts.find((x) => x.id === b.ota_id)?.nom + ' / ' : '') + b.nom))) : null;
+    const tavsif = h('textarea', { class: 'input', id: 'ut', placeholder: 'Bu qanday hujjat? (ixtiyoriy)' });
+    const bar = h('div'), status = h('div', { class: 'm' }), prog = h('div', { style: 'display:none;flex-direction:column;gap:6px' }, status, h('div', { class: 'bar' }, bar));
+    const msg = h('div');
+    const input = h('input', { type: 'file', multiple: true, style: 'display:none', onchange: async () => {
+      const files = [...input.files]; input.value = ''; if (!files.length) return;
+      btn.disabled = true; prog.style.display = 'flex'; msg.replaceChildren();
+      let ok = 0;
+      for (const f of files) {
+        try {
+          if (!f.size) throw new Error('bo\'sh fayl');
+          status.textContent = `${f.name}: tayyorlanmoqda…`; bar.style.width = '3%';
+          const s = await api({ action: 'h_session', name: f.name, mime: f.type, size: f.size, bolim_id: sel ? sel.value : null });
+          const id = await new Promise((res, rej) => {
+            const x = new XMLHttpRequest(); x.open('PUT', s.upload_url); x.responseType = 'json';
+            x.upload.onprogress = (e) => { if (e.lengthComputable) { bar.style.width = `${5 + Math.round(e.loaded / e.total * 85)}%`; status.textContent = `${f.name}: ${Math.round(e.loaded / e.total * 100)}%`; } };
+            x.onload = () => (x.status < 300 && x.response && x.response.id ? res(x.response.id) : rej(new Error('yuklanmadi')));
+            x.onerror = () => rej(new Error('aloqa uzildi')); x.send(f);
+          });
+          status.textContent = `${f.name}: saqlanmoqda…`; bar.style.width = '95%';
+          await api({ action: 'h_done', file_id: id, bolim_id: sel ? sel.value : null, tavsif: tavsif.value.trim() });
+          ok++;
+        } catch (e) { msg.append(h('div', { class: 'err' }, `«${f.name}»: ${e.message}`)); }
+      }
+      btn.disabled = false; prog.style.display = 'none';
+      if (ok) { tavsif.value = ''; msg.prepend(h('div', { class: 'ok' }, `Rahmat! ${ok} ta hujjat qabul qilindi. Tekshirilgandan keyin kutubxonaga qo'shiladi.`)); }
+    } });
+    const btn = h('button', { class: 'btn', onclick: () => input.click() }, '+ Fayl tanlash');
+    return h('section', { class: 'card' }, h('div', { class: 't' }, 'Hujjat yuborish'),
+      sel && h('div', { class: 'field' }, h('label', { for: 'ub' }, 'Bo\'lim'), sel),
+      h('div', { class: 'field' }, h('label', { for: 'ut' }, 'Izoh'), tavsif),
+      h('div', { class: 'm' }, 'Har qanday fayl, 50 MB gacha.'), input, btn, prog, msg);
+  }
+
+  function render() {
+    const info = S.info, L = info.havola;
+    const sub = `${S.ism} · ${L.muddat ? 'havola ' + date(L.muddat) + ' gacha' : 'havola muddatsiz'}`;
+    const kids = [head(sub)];
+    if (info.hujjat) { kids.push(docCard(info.hujjat)); app.replaceChildren(...kids); return; }
+    if (L.tur === 'qoshish' || L.tur === 'yuklash') kids.push(uploadBox());
+    if (L.tur !== 'yuklash') {
+      const box = h('div', { style: 'display:flex;flex-direction:column;gap:12px' });
+      const inp = h('input', { class: 'input', type: 'search', placeholder: 'Hujjat ichidan qidirish', value: S.q, 'aria-label': 'Qidirish',
+        oninput: (e) => { S.q = e.target.value; clearTimeout(inp._t); inp._t = setTimeout(() => list(box), 350); } });
+      const tops = info.bolimlar.filter((b) => !b.ota_id || !info.bolimlar.some((x) => x.id === b.ota_id));
+      const chip = (id, label) => h('button', { class: 'chip' + (S.bolim === id ? ' on' : ''), onclick: () => { S.bolim = id; render(); } }, label);
+      kids.push(h('h2', {}, 'Hujjatlar'), inp, tops.length > 1 ? h('div', { class: 'chips' }, chip('', 'Hammasi'), tops.map((b) => chip(b.id, b.nom))) : null, box);
+      app.replaceChildren(...kids); list(box); return;
+    }
+    app.replaceChildren(...kids);
+  }
+
+  async function start() {
+    try { S.info = await api({ action: 'h_info' }); render(); }
+    catch (e) { fail(e.message); }
+  }
+
+  if (token.length < 20) fail('Havola to\'liq emas. Sizga yuborilgan havolani to\'liq oching.');
+  else if (!S.ism) askName();
+  else start();
+})();
+</script>
+</body>
+</html>

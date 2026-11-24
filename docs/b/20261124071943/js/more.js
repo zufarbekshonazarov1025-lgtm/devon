@@ -129,7 +129,7 @@ export function AchievementsCard() {
 // ---------- Mening sozlamalarim ----------
 // ---------- Pastki menyu: o'rtadagi bo'limlarni har kim o'zi tanlaydi (shu telefonda saqlanadi) ----------
 export const NAV_CHOICES = [['#/ishlar', 'Ishlar', 'list'], ['#/taqvim', 'Taqvim', 'cal'], ['#/tasdiq', 'Tasdiq', 'check'], ['#/hisobot', 'Hisobot', 'chart'], ['#/statistika', 'Statistika', 'stats'],
-  ['#/eslatmalar', 'Eslatma', 'bell'], ['#/kutilmoqda', 'Kutilmoqda', 'clock'], ['#/pullar', 'Pullar', 'wallet']];
+  ['#/eslatmalar', 'Eslatma', 'bell'], ['#/kutilmoqda', 'Kutilmoqda', 'clock'], ['#/kutubxona', 'Kutubxona', 'book'], ['#/pullar', 'Pullar', 'wallet']];
 /** «Pullar» — yordamchining shaxsiy bo'limi, boshqa foydalanuvchiga menyuda ko'rinmaydi. */
 export const navChoices = () => NAV_CHOICES.filter(([hh]) => hh !== '#/pullar' || S.me?.kind === 'yordamchi');
 const NAV_DEFAULT = ['#/ishlar', '#/taqvim', '#/tasdiq', '#/hisobot'], NAV_MAX = 4;
