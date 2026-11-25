@@ -136,6 +136,49 @@ function DocCard(d) {
 }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+// ---------- Eski Drive fayllarini ko'chirish (faqat admin, bir martalik) ----------
+function KochirCard() {
+  if (!S.me.is_admin) return null;
+  const box = h('div');
+  const paint = async () => {
+    if (!box.isConnected && box._painted) return;
+    box._painted = true;
+    const [{ count }, { data: st }] = await Promise.all([
+      sb.from('kutubxona_hujjatlar').select('id', { count: 'exact', head: true }).eq('manba', 'kochirildi').is('drive_file_id', null).is('deleted_at', null)
+        .like('drive_url', '%google.com%').not('drive_url', 'like', '%/folders/%'),
+      sb.from('app_settings').select('value').eq('key', 'kutubxona_kochir').maybeSingle()]);
+    const v = (st && st.value) || {}, xato = Object.values(v.xato || {});
+    const left = count || 0;
+    if (v.holat === 'ishlamoqda') {
+      box.replaceChildren(h('section', { class: 'card' },
+        h('b', {}, 'Eski fayllar ko\'chirilmoqda'),
+        h('div', { class: 't-meta' }, `Ko'chirildi: ${v.bajarildi || 0} ta · qoldi: ${Math.max(0, left - xato.length)} ta` + (xato.length ? ` · o'tmadi: ${xato.length} ta` : '')),
+        h('div', { class: 't-meta' }, 'Sahifani yopsangiz ham server davom etadi.')));
+      setTimeout(paint, 15000);
+      return;
+    }
+    if (!left) { box.replaceChildren(); return; }
+    const start = async (e) => {
+      e.target.disabled = true;
+      const { data, error } = await sb.functions.invoke('drive', { body: { action: 'kochir_start' } });
+      if (error || !data || !data.url) {
+        let msg = 'Server bilan bog\'lanib bo\'lmadi';
+        try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch (x) { /* matn yo'q */ }
+        toast(msg); e.target.disabled = false; return;
+      }
+      location.href = data.url;
+    };
+    box.replaceChildren(h('section', { class: 'card' },
+      h('b', {}, `Eski fayllar: ${left} tasi hali faqat Drive havolasi`),
+      h('div', { class: 't-meta' }, 'Ko\'chirilsa, har biri Kutubxona papkasiga nusxa bo\'lib tushadi: matnini AI o\'qiydi, havola orqali kirganlar ham ochadi. Asl fayllar joyida qoladi.'),
+      h('div', { class: 't-meta' }, 'Google bir martalik «faylni ko\'rish» ruxsatini so\'raydi. Ruxsat 1 soat ishlaydi va saqlanmaydi: Devon keyin ham faqat o\'zi yaratgan fayllarni ko\'radi.'),
+      xato.length ? h('details', {}, h('summary', { class: 't-meta c-red' }, `O'tgan safar ${xato.length} tasi o'tmadi`), h('ul', { class: 't-meta' }, xato.map((x) => h('li', {}, x)))) : null,
+      h('button', { class: 'btn', type: 'button', onclick: start }, 'Eski fayllarni ko\'chirish')));
+  };
+  paint();
+  return box;
+}
+
 function DocsTab() {
   const box = h('div', { style: 'display:flex;flex-direction:column;gap:12px' }, h('div', { class: 't-meta' }, 'Yuklanmoqda…'));
   const load = async () => {
@@ -160,6 +203,7 @@ function DocsTab() {
   const fchip = (id, label) => h('button', { class: 'fchip' + (K.bolim === id ? ' on' : ''), type: 'button', 'aria-pressed': String(K.bolim === id), onclick: () => { K.bolim = id; bus.render(); } }, label);
   const subs = K.bolim !== 'all' ? K.bolimlar.filter((b) => b.ota_id === (bolimById(K.bolim)?.ota_id || K.bolim)) : [];
   return [
+    KochirCard(),
     h('label', { class: 'search' }, icon('search', 18, '#56645F'), input),
     h('div', { class: 'filters' }, fchip('all', 'Hammasi'), tops.map((b) => fchip(b.id, b.nom + (b.maxfiy ? ' 🔒' : '')))),
     subs.length ? h('div', { class: 'filters' }, subs.map((b) => fchip(b.id, b.nom + (isSecret(b.id) ? ' 🔒' : '')))) : null,

@@ -131,6 +131,6 @@ export function driveReturn() {
   const p = new URLSearchParams(location.search), v = p.get('drive');
   if (!v) return;
   history.replaceState(null, '', location.pathname + location.hash);
-  const MSG = { ulandi: 'Google Drive ulandi', bekor: 'Ulash bekor qilindi', muddat: 'Vaqt o\'tib ketdi, qaytadan urinib ko\'ring', xato: 'Google ruxsat bermadi', kalit: 'Google kalit bermadi. Qaytadan ulab ko\'ring', papka: 'Papka yaratib bo\'lmadi' };
+  const MSG = { ulandi: 'Google Drive ulandi', bekor: 'Ulash bekor qilindi', muddat: 'Vaqt o\'tib ketdi, qaytadan urinib ko\'ring', xato: 'Google ruxsat bermadi', kalit: 'Google kalit bermadi. Qaytadan ulab ko\'ring', papka: 'Papka yaratib bo\'lmadi', kochir: 'Ruxsat berildi. Eski fayllar Kutubxonaga ko\'chirilmoqda, bir necha daqiqa oladi' };
   setTimeout(() => toast(MSG[v] || 'Drive: ' + v), 1600);
 }

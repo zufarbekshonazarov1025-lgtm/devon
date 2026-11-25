@@ -525,6 +525,120 @@ async function mcp(req: Request, url: URL) {
   return one ? new Response(JSON.stringify(one), { headers: H }) : new Response(null, { status: 202, headers: H });
 }
 
+// ---------------- Eski Drive fayllarini Kutubxonaga ko'chirish (bir martalik) ----------------
+// Admin bir marta 1 soatlik «faqat o'qish» ruxsatini beradi (drive funksiyasi tmp_token'ga yozadi).
+// Bu yerda har bir eski yozuvning asl fayli o'qiladi va Kutubxona papkasiga Devon'ning o'z fayli bo'lib yuklanadi:
+// shundan keyin matni AI'ga ochiladi, havola egalari ham yuklab oladi. Asl fayl joyida qoladi.
+const OFFICE: Record<string, string> = {
+  [GDOC]: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  [GSHEET]: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  [GSLIDES]: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+};
+function driveIdOf(u: unknown) {
+  const s = String(u ?? "");
+  const m = s.match(/\/(?:file|document|spreadsheets|presentation)\/d\/([\w-]{20,})/) ?? s.match(/[?&]id=([\w-]{20,})/);
+  return m ? m[1] : null;
+}
+type Eski = { id: string; nom: string; drive_url: string | null; tavsif: string | null };
+async function kochirNavbat(skip: string[]): Promise<Eski[]> {
+  const { data } = await admin.from("kutubxona_hujjatlar").select("id,nom,drive_url,tavsif").eq("manba", "kochirildi").is("drive_file_id", null).is("deleted_at", null).order("created_at");
+  return ((data ?? []) as Eski[]).filter((d) => driveIdOf(d.drive_url) && !skip.includes(d.id));
+}
+async function kochirBir(acc: { token: string }, ro: string, folder: string, d: Eski) {
+  const fid = driveIdOf(d.drive_url)!;
+  const m = await g(ro, `https://www.googleapis.com/drive/v3/files/${fid}?fields=id,name,mimeType,size&supportsAllDrives=true`);
+  if (!m.ok) throw new Error(m.status === 404 ? "Drive'da topilmadi yoki ruxsat yo'q" : `Drive javobi ${m.status}`);
+  const meta = await m.json() as { name: string; mimeType: string; size?: string };
+  let bytes: Uint8Array, upMime: string;
+  const target = meta.mimeType;
+  if (OFFICE[meta.mimeType]) {
+    upMime = OFFICE[meta.mimeType];
+    const r = await g(ro, `https://www.googleapis.com/drive/v3/files/${fid}/export?mimeType=${encodeURIComponent(upMime)}`);
+    if (!r.ok) throw new Error(`Eksport bo'lmadi (${r.status})`);
+    bytes = new Uint8Array(await r.arrayBuffer());
+  } else if (meta.mimeType.startsWith("application/vnd.google-apps")) {
+    throw new Error("Bu turdagi Google fayl ko'chirilmaydi");
+  } else {
+    if (Number(meta.size ?? 0) > MAX_LINK) throw new Error("Fayl 50 MB dan katta");
+    upMime = meta.mimeType;
+    const r = await g(ro, `https://www.googleapis.com/drive/v3/files/${fid}?alt=media&supportsAllDrives=true`);
+    if (!r.ok) throw new Error(`Yuklab olinmadi (${r.status})`);
+    bytes = new Uint8Array(await r.arrayBuffer());
+  }
+  const b = "devon" + crypto.randomUUID(), enc = new TextEncoder();
+  const head = enc.encode(`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name: meta.name, parents: [folder], mimeType: target, appProperties: { devon_kutubxona: d.id } })}\r\n--${b}\r\nContent-Type: ${upMime}\r\n\r\n`);
+  const up = await g(acc.token, "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,mimeType,size", {
+    method: "POST", headers: { "Content-Type": `multipart/related; boundary=${b}` }, body: new Blob([head, bytes, enc.encode(`\r\n--${b}--`)]),
+  });
+  if (!up.ok) throw new Error(`Kutubxonaga yuklanmadi (${up.status})`);
+  const f = await up.json() as { id: string; webViewLink: string; mimeType: string; size?: string };
+  const matn = await extractText(acc.token, f.id, f.mimeType);
+  await shareWithTeam(acc.token, f.id);
+  const tavsif = [d.tavsif, `Asl nusxa: ${d.drive_url}`].filter(Boolean).join("\n");
+  const { error } = await admin.from("kutubxona_hujjatlar").update({ drive_file_id: f.id, drive_url: f.webViewLink, mime: f.mimeType, hajm: Number(f.size ?? bytes.length), matn, til: langOf(matn), tavsif }).eq("id", d.id);
+  if (error) throw new Error(error.message);
+  await jurnal({ aktor_turi: "tizim", aktor: "Ko'chirish", hujjat_id: d.id, amal: "yangi_versiya", tafsilot: { izoh: "Eski Drive faylidan Kutubxonaga nusxa olindi", matn: !!matn } });
+}
+async function kochir() {
+  const t0 = Date.now();
+  const { data: l } = await admin.from("drive_link").select("tmp_token,tmp_exp").eq("id", 1).maybeSingle();
+  const { data: st } = await admin.from("app_settings").select("value").eq("key", "kutubxona_kochir").maybeSingle();
+  const v = (st?.value ?? {}) as Record<string, unknown>;
+  const xato = (v.xato ?? {}) as Record<string, string>;
+  const navbat = await kochirNavbat(Object.keys(xato));
+  const save = (extra: Record<string, unknown>) => admin.from("app_settings").upsert({ key: "kutubxona_kochir", value: { ...v, xato, qoldi: navbat.length, ...extra } });
+  if (!l?.tmp_token || !l.tmp_exp || Date.parse(l.tmp_exp) < Date.now()) {
+    if (l?.tmp_token) await admin.from("drive_link").update({ tmp_token: null, tmp_exp: null }).eq("id", 1);
+    if (v.holat === "ishlamoqda") await save({ holat: navbat.length ? "toxtadi" : "tugadi", tugadi: new Date().toISOString() });
+    return { ok: false, sabab: "ruxsat yo'q yoki muddati tugagan" };
+  }
+  const acc = await accessToken();
+  if (!acc) return { ok: false, sabab: "Drive ulanmagan" };
+  const folder = await shelf(acc);
+  let done = Number(v.bajarildi ?? 0);
+  while (navbat.length && Date.now() - t0 < 45_000) {
+    const d = navbat.shift()!;
+    try { await kochirBir(acc, l.tmp_token, folder, d); done++; }
+    catch (e) { xato[d.id] = `${d.nom}: ${e instanceof Error ? e.message : "xato"}`; }
+    await save({ holat: "ishlamoqda", bajarildi: done });
+  }
+  if (!navbat.length) {
+    await admin.from("drive_link").update({ tmp_token: null, tmp_exp: null }).eq("id", 1);
+    await save({ holat: "tugadi", bajarildi: done, tugadi: new Date().toISOString() });
+  }
+  return { ok: true, bajarildi: done, qoldi: navbat.length, xato: Object.keys(xato).length };
+}
+
+/** Ichki (faqat server kaliti bilan): matnli hujjatni Kutubxonaga Google Doc qilib qo'shish yoki mavjud yozuvga biriktirish (Markaz va Claude hujjatlarini ko'chirish uchun). */
+async function ichkiQosh(b: Record<string, unknown>) {
+  const acc = await accessToken();
+  if (!acc) return { error: "Drive ulanmagan" };
+  const folder = await shelf(acc);
+  const all = await bolimlar();
+  const nom = clean(b.nom, 200), matn = String(b.matn ?? "").slice(0, MAX_TEXT);
+  if (!nom || !matn.trim()) return { error: "Nom va matn kerak" };
+  const f = await docFromText(acc.token, folder, nom, matn, { devon_kutubxona: "1" });
+  await shareWithTeam(acc.token, f.id);
+  if (b.hujjat_id) {
+    const { data: old } = await admin.from("kutubxona_hujjatlar").select("id,tavsif,drive_url,drive_file_id").eq("id", String(b.hujjat_id)).maybeSingle();
+    if (!old) return { error: "Hujjat topilmadi" };
+    const tavsif = [old.tavsif, old.drive_url && !old.drive_file_id ? `Asl nusxa: ${old.drive_url}` : null].filter(Boolean).join("\n") || null;
+    const { error } = await admin.from("kutubxona_hujjatlar").update({ drive_file_id: f.id, drive_url: f.webViewLink, mime: GDOC, matn, til: langOf(matn), tavsif }).eq("id", old.id);
+    if (error) return { error: error.message };
+    await jurnal({ aktor_turi: "tizim", aktor: "Ko'chirish", hujjat_id: old.id, amal: "yangi_versiya", tafsilot: { izoh: clean(b.izoh, 200) || "Matni bilan Kutubxonaga ko'chirildi" } });
+    return { ok: true, id: old.id, url: f.webViewLink };
+  }
+  const bol = await findBolim(all, b.bolim);
+  const teglar = Array.isArray(b.teglar) ? b.teglar.map((t) => clean(t, 40)).filter(Boolean).slice(0, 12) : [];
+  const { data: row, error } = await admin.from("kutubxona_hujjatlar").insert({
+    nom, bolim_id: bol?.id ?? null, tavsif: clean(b.tavsif, 1000) || null, teglar, holat: "tasdiqlangan", manba: "kochirildi", manba_nomi: clean(b.manba_nomi, 120) || "Markaz", ishonchli: true,
+    drive_file_id: f.id, drive_url: f.webViewLink, mime: GDOC, matn, til: langOf(matn),
+  }).select("id").single();
+  if (error) return { error: error.message };
+  await jurnal({ aktor_turi: "tizim", aktor: "Ko'chirish", hujjat_id: row.id, amal: "qoshdi", tafsilot: { nom, manba: clean(b.manba_nomi, 120) || "Markaz" } });
+  return { ok: true, id: row.id, url: f.webViewLink };
+}
+
 // ---------------- kirish nuqtasi ----------------
 Deno.serve(async (req) => {
   const url = new URL(req.url);
@@ -536,6 +650,14 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch { /* bo'sh */ }
   try {
     if (String(body.action ?? "").startsWith("h_")) return await linkAction(req, body);
+    const cronKey = req.headers.get("x-cron-key");
+    if (cronKey) {
+      const { data: l } = await admin.from("drive_link").select("cron_key").eq("id", 1).maybeSingle();
+      if (!l?.cron_key || l.cron_key !== cronKey) return json(req, { error: "kalit" }, 401);
+      if (body.action === "kochir") return json(req, await kochir());
+      if (body.action === "ichki_qosh") return json(req, await ichkiQosh(body));
+      return json(req, { error: "amal" }, 400);
+    }
     const user = await whoAmI(req);
     if (!user) return json(req, { error: "Kirish kerak" }, 401);
     return await userAction(req, user, body);

@@ -463,6 +463,7 @@ export function More() {
       h('div', { class: 'list' }, row('Pullar', 'Kirim-chiqim, pul qayerga ketyapti · faqat sizga ko\'rinadi', () => go('#/pullar')))],
     h('div', { class: 'section' }, h('h2', { style: 'font-size:13px;color:var(--muted)' }, 'Ishlar')),
     h('div', { class: 'list' },
+      row('Kutubxona', 'Kompaniyaning hamma hujjatlari, havolalar va AI ulanishi', () => go('#/kutubxona')),
       row('Statistika', 'Natijalar, grafiklar, ikkalamiz yonma-yon', () => go('#/statistika')),
       row('Matndan qo\'shish', 'Bir nechta topshiriqni ro\'yxatdan kiritish', () => go('#/ishlar/matn')),
       row('Excelga chiqarish', 'Topshiriqlar, reja va hisobotlar bitta faylda', () => downloadExcel()),

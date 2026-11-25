@@ -13,6 +13,8 @@ const ORIGINS = ["https://zufarbekshonazarov1025-lgtm.github.io", "https://local
 const REDIRECT = `${URL_}/functions/v1/drive`;
 const SCOPE = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email";
 const MAX_BYTES = 200 * 1024 * 1024;
+// Kutubxona: eski fayllarni bir martalik ko'chirish uchun faqat o'qish ruxsati (1 soatlik token, uzoq muddatli kalit saqlanmaydi)
+const SCOPE_KOCHIR = "https://www.googleapis.com/auth/drive.readonly";
 
 const admin = createClient(URL_, SERVICE, { auth: { persistSession: false } });
 
@@ -175,6 +177,23 @@ Deno.serve(async (req) => {
     if (!code || !state) return back("bekor");
     const { data: link } = await admin.from("drive_link").select("state,state_user,state_at").eq("id", 1).maybeSingle();
     if (!link?.state || link.state !== state || !link.state_at || Date.now() - Date.parse(link.state_at) > 10 * 60 * 1000) return back("muddat");
+    // Kutubxona ko'chirishi: faqat vaqtinchalik o'qish tokeni olinadi, asosiy ulanish o'zgarmaydi
+    if (state.startsWith("k_")) {
+      const toKutubxona = (msg: string) => Response.redirect(`${APP}?drive=${encodeURIComponent(msg)}#/kutubxona`, 302);
+      const r = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ code, client_id: CID, client_secret: CSECRET, redirect_uri: REDIRECT, grant_type: "authorization_code" }),
+      });
+      if (!r.ok) return toKutubxona("xato");
+      const tok = await r.json();
+      if (!String(tok.scope ?? "").includes("drive.readonly")) return toKutubxona("xato");
+      const exp = new Date(Date.now() + (Number(tok.expires_in ?? 3600) - 120) * 1000).toISOString();
+      await admin.from("drive_link").update({ tmp_token: tok.access_token, tmp_exp: exp, state: null, state_user: null, state_at: null }).eq("id", 1);
+      // Uzoq muddatli kalit (refresh token) so'ralmaydi va saqlanmaydi; token 1 soatda o'zi tugaydi
+      await admin.from("app_settings").upsert({ key: "kutubxona_kochir", value: { holat: "ishlamoqda", boshlandi: new Date().toISOString(), tugaydi: exp } });
+      return toKutubxona("kochir");
+    }
     const r = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -216,6 +235,17 @@ Deno.serve(async (req) => {
     const state = crypto.randomUUID() + crypto.randomUUID();
     await admin.from("drive_link").update({ state, state_user: user.id, state_at: new Date().toISOString() }).eq("id", 1);
     const q = new URLSearchParams({ client_id: CID, redirect_uri: REDIRECT, response_type: "code", scope: SCOPE, access_type: "offline", prompt: "consent", state });
+    return json(req, { url: `https://accounts.google.com/o/oauth2/v2/auth?${q}` });
+  }
+  // --- Kutubxona: eski fayllarni ko'chirish uchun bir martalik o'qish ruxsati (faqat admin) ---
+  if (action === "kochir_start") {
+    if (!user.isAdmin) return json(req, { error: "Faqat admin" }, 403);
+    if (!CID || !CSECRET) return json(req, { error: "Google kalitlari kiritilmagan" }, 400);
+    const { data: l } = await admin.from("drive_link").select("refresh_token,email").eq("id", 1).maybeSingle();
+    if (!l?.refresh_token) return json(req, { error: "Avval Google Drive'ni ulang: Yana → Admin panel" }, 400);
+    const state = "k_" + crypto.randomUUID() + crypto.randomUUID();
+    await admin.from("drive_link").update({ state, state_user: user.id, state_at: new Date().toISOString() }).eq("id", 1);
+    const q = new URLSearchParams({ client_id: CID, redirect_uri: REDIRECT, response_type: "code", scope: SCOPE_KOCHIR, access_type: "online", prompt: "consent", state, ...(l.email ? { login_hint: l.email } : {}) });
     return json(req, { url: `https://accounts.google.com/o/oauth2/v2/auth?${q}` });
   }
   if (action === "backup") {
