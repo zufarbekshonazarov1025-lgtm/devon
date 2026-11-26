@@ -131,7 +131,7 @@ function DocCard(d) {
           h('div', { class: 't-meta' }, [bolimName(d.bolim_id) + (isSecret(d.bolim_id) ? ' 🔒' : ''), fmtDate(d.updated_at), size(d.hajm)].filter(Boolean).join(' · ')))),
       d.holat !== 'tasdiqlangan' && chip(ho[0], ho[1])),
     d.parcha ? h('div', { class: 't-meta', style: 'font-size:13px', html: esc(d.parcha).replace(/«/g, '<b>').replace(/»/g, '</b>') })
-      : d.tavsif ? h('div', { class: 't-meta', style: 'font-size:13px' }, d.tavsif) : null,
+      : d.tavsif ? h('div', { class: 't-meta', style: 'font-size:13px;white-space:pre-line;overflow-wrap:anywhere' }, d.tavsif) : null,
     (!d.ishonchli || d.manba !== 'devon') && h('div', { class: 't-meta' }, `${MANBA[d.manba] || d.manba}${d.manba_nomi ? ' · ' + d.manba_nomi : ''}${d.ishonchli ? '' : ' · tekshirilmagan'}`));
 }
 /** replaceChildren o'rniga: ichma-ich ro'yxat va bo'sh (null/false) qismlarni to'g'ri qo'yadi. */
@@ -223,7 +223,7 @@ function InboxTab() {
       h('a', { href: `#/kutubxona/h/${d.id}`, style: 'color:inherit;text-decoration:none' }, h('div', { class: 't-title' }, d.nom)),
       h('div', { class: 't-meta' }, `${MANBA[d.manba] || d.manba}${d.manba_nomi ? ' · ' + d.manba_nomi : ''} · ${bolimName(d.bolim_id)} · ${fmtDateTime(d.updated_at)}`),
       d.holat === 'korib_chiqishda' && h('div', { class: 't-meta' }, 'Mavjud hujjatning yangi versiyasi — eski versiya tarixda saqlangan.'),
-      d.tavsif && h('div', { class: 't-meta', style: 'font-size:13px' }, d.tavsif),
+      d.tavsif && h('div', { class: 't-meta', style: 'font-size:13px;white-space:pre-line;overflow-wrap:anywhere' }, d.tavsif),
       h('div', { class: 'row' },
         d.drive_url && h('a', { class: 'btn ghost small', href: d.drive_url, target: '_blank', rel: 'noopener' }, 'Ochish'),
         h('button', { class: 'btn ghost small', type: 'button', onclick: async () => {
@@ -457,7 +457,7 @@ export function LibraryDoc(id) {
         h('div', { class: 'row', style: 'flex-wrap:wrap;gap:6px' }, chip(ho[0], ho[1]), isSecret(d.bolim_id) && chip('Maxfiy 🔒', 'red'), !d.ishonchli && chip('Tekshirilmagan', 'amber'), chip(`v${d.joriy_versiya}`, 'grey'), d.til && chip(d.til === 'kirill' ? 'Kirill yozuvi' : 'Lotin yozuvi', d.til === 'kirill' ? 'amber' : 'grey')),
         h('div', { class: 'field' }, h('label', {}, 'Bo\'lim'), sel),
         h('div', { class: 't-meta' }, [`${MANBA[d.manba] || d.manba}${d.manba_nomi ? ' · ' + d.manba_nomi : ''}`, `qo'shilgan ${fmtDateTime(d.created_at)}`, `yangilangan ${fmtDateTime(d.updated_at)}`, size(d.hajm)].filter(Boolean).join(' · ')),
-        d.tavsif && h('div', { style: 'font-size:14px' }, d.tavsif),
+        d.tavsif && h('div', { style: 'font-size:14px;white-space:pre-line;overflow-wrap:anywhere' }, d.tavsif),
         d.teglar?.length ? h('div', { class: 'row', style: 'flex-wrap:wrap;gap:6px' }, d.teglar.map((t) => chip('#' + t, 'grey'))) : null,
         h('div', { class: 'row', style: 'flex-wrap:wrap' },
           d.drive_url && h('a', { class: 'btn small', href: d.drive_url, target: '_blank', rel: 'noopener' }, 'Drive\'da ochish'),
