@@ -134,6 +134,8 @@ function DocCard(d) {
       : d.tavsif ? h('div', { class: 't-meta', style: 'font-size:13px' }, d.tavsif) : null,
     (!d.ishonchli || d.manba !== 'devon') && h('div', { class: 't-meta' }, `${MANBA[d.manba] || d.manba}${d.manba_nomi ? ' · ' + d.manba_nomi : ''}${d.ishonchli ? '' : ' · tekshirilmagan'}`));
 }
+/** replaceChildren o'rniga: ichma-ich ro'yxat va bo'sh (null/false) qismlarni to'g'ri qo'yadi. */
+const fill = (el, ...kids) => el.replaceChildren(...kids.flat(Infinity).filter((k) => k != null && k !== false && k !== '').map((k) => (k.nodeType ? k : document.createTextNode(String(k)))));
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ---------- Eski Drive fayllarini ko'chirish (faqat admin, bir martalik) ----------
@@ -150,14 +152,14 @@ function KochirCard() {
     const v = (st && st.value) || {}, xato = Object.values(v.xato || {});
     const left = count || 0;
     if (v.holat === 'ishlamoqda') {
-      box.replaceChildren(h('section', { class: 'card' },
+      fill(box, h('section', { class: 'card' },
         h('b', {}, 'Eski fayllar ko\'chirilmoqda'),
         h('div', { class: 't-meta' }, `Ko'chirildi: ${v.bajarildi || 0} ta · qoldi: ${Math.max(0, left - xato.length)} ta` + (xato.length ? ` · o'tmadi: ${xato.length} ta` : '')),
         h('div', { class: 't-meta' }, 'Sahifani yopsangiz ham server davom etadi.')));
       setTimeout(paint, 15000);
       return;
     }
-    if (!left) { box.replaceChildren(); return; }
+    if (!left) { fill(box); return; }
     const start = async (e) => {
       e.target.disabled = true;
       const { data, error } = await sb.functions.invoke('drive', { body: { action: 'kochir_start' } });
@@ -168,7 +170,7 @@ function KochirCard() {
       }
       location.href = data.url;
     };
-    box.replaceChildren(h('section', { class: 'card' },
+    fill(box, h('section', { class: 'card' },
       h('b', {}, `Eski fayllar: ${left} tasi hali faqat Drive havolasi`),
       h('div', { class: 't-meta' }, 'Ko\'chirilsa, har biri Kutubxona papkasiga nusxa bo\'lib tushadi: matnini AI o\'qiydi, havola orqali kirganlar ham ochadi. Asl fayllar joyida qoladi.'),
       h('div', { class: 't-meta' }, 'Google bir martalik «faylni ko\'rish» ruxsatini so\'raydi. Ruxsat 1 soat ishlaydi va saqlanmaydi: Devon keyin ham faqat o\'zi yaratgan fayllarni ko\'radi.'),
@@ -194,7 +196,7 @@ function DocsTab() {
       if (bolim) s = s.in('bolim_id', [bolim, ...K.bolimlar.filter((b) => b.ota_id === bolim).map((b) => b.id)]);
       rows = (await s).data || [];
     }
-    box.replaceChildren(...(rows.length ? rows.map(DocCard) : [Empty(K.q ? 'Hech narsa topilmadi' : 'Bu bo\'limda hujjat yo\'q', K.q ? 'Boshqa so\'z bilan, lotin yoki kirill yozuvida urinib ko\'ring.' : '«+ Hujjat» tugmasi bilan qo\'shing.')]));
+    fill(box, ...(rows.length ? rows.map(DocCard) : [Empty(K.q ? 'Hech narsa topilmadi' : 'Bu bo\'limda hujjat yo\'q', K.q ? 'Boshqa so\'z bilan, lotin yoki kirill yozuvida urinib ko\'ring.' : '«+ Hujjat» tugmasi bilan qo\'shing.')]));
   };
   load();
   const input = h('input', { type: 'search', placeholder: 'Hujjat ichidan qidirish', 'aria-label': 'Kutubxonadan qidirish', value: K.q,
@@ -217,7 +219,7 @@ function InboxTab() {
     const { data } = await sb.from('kutubxona_hujjatlar').select('id,nom,bolim_id,holat,manba,manba_nomi,ishonchli,tavsif,hajm,updated_at,created_at,drive_url').is('deleted_at', null).in('holat', ['kiruvchi', 'korib_chiqishda']).order('created_at', { ascending: false });
     const rows = data || [];
     K.kiruvchi = rows.length;
-    box.replaceChildren(...(rows.length ? rows.map((d) => h('article', { class: 'card' },
+    fill(box, ...(rows.length ? rows.map((d) => h('article', { class: 'card' },
       h('a', { href: `#/kutubxona/h/${d.id}`, style: 'color:inherit;text-decoration:none' }, h('div', { class: 't-title' }, d.nom)),
       h('div', { class: 't-meta' }, `${MANBA[d.manba] || d.manba}${d.manba_nomi ? ' · ' + d.manba_nomi : ''} · ${bolimName(d.bolim_id)} · ${fmtDateTime(d.updated_at)}`),
       d.holat === 'korib_chiqishda' && h('div', { class: 't-meta' }, 'Mavjud hujjatning yangi versiyasi — eski versiya tarixda saqlangan.'),
@@ -278,7 +280,7 @@ function LinksTab() {
   const load = async () => {
     const { data } = await sb.from('kutubxona_havolalar').select('*').order('created_at', { ascending: false });
     const now = Date.now();
-    box.replaceChildren(...((data || []).length ? data.map((l) => {
+    fill(box, ...((data || []).length ? data.map((l) => {
       const expired = l.muddat && Date.parse(l.muddat) < now, on = l.faol && !expired;
       return h('article', { class: 'card' },
         h('div', { class: 'between' }, h('div', { class: 't-title' }, l.nom), on ? chip('Ochiq', 'green') : chip(expired ? 'Muddati tugagan' : 'Yopiq', 'grey')),
@@ -342,7 +344,7 @@ function AiTab() {
   const box = h('div', { style: 'display:flex;flex-direction:column;gap:12px' }, h('div', { class: 't-meta' }, 'Yuklanmoqda…'));
   const load = async () => {
     const { data } = await sb.from('kutubxona_ai_kalitlar').select('id,nom,huquqlar,maxfiyga_ruxsat,faol,oxirgi_ishlatish,created_at').order('created_at', { ascending: false });
-    box.replaceChildren(...((data || []).length ? data.map((k) => h('article', { class: 'card' },
+    fill(box, ...((data || []).length ? data.map((k) => h('article', { class: 'card' },
       h('div', { class: 'between' }, h('div', { class: 't-title' }, '🤖 ' + k.nom), k.faol ? chip('Faol', 'green') : chip('O\'chirilgan', 'grey')),
       h('div', { class: 't-meta' }, `Ruxsat: qidirish, o'qish${k.huquqlar.includes('qosh') ? ', qo\'shish' : ''}${k.huquqlar.includes('yangila') ? ', yangilash' : ''}${k.maxfiyga_ruxsat ? ' · maxfiylar ham 🔒' : ''}`),
       h('div', { class: 't-meta' }, `Oxirgi ishlatilgan: ${k.oxirgi_ishlatish ? fmtDateTime(k.oxirgi_ishlatish) : 'hali yo\'q'}`),
@@ -367,7 +369,7 @@ function LogTab() {
   (async () => {
     const { data } = await sb.from('kutubxona_jurnal').select('*, kutubxona_hujjatlar(nom)').order('qachon', { ascending: false }).limit(150);
     const rows = data || [];
-    box.replaceChildren(h('div', { class: 'log' }, rows.length ? rows.map((r) => h('div', { class: 'item' },
+    fill(box, h('div', { class: 'log' }, rows.length ? rows.map((r) => h('div', { class: 'item' },
       h('span', { class: 'who' }, `${AKTOR[r.aktor_turi] || ''} ${r.aktor || ''}`), ' ', AMAL[r.amal] || r.amal,
       r.kutubxona_hujjatlar?.nom ? [': ', h('a', { href: `#/kutubxona/h/${r.hujjat_id}` }, r.kutubxona_hujjatlar.nom)] : (r.tafsilot?.q ? `: «${r.tafsilot.q}»` : r.tafsilot?.nom ? `: ${r.tafsilot.nom}` : ''),
       h('div', { class: 'when' }, fmtDateTime(r.qachon)))) : h('div', { class: 't-meta' }, 'Hali hech narsa yozilmagan.')));
@@ -378,7 +380,7 @@ function LogTab() {
 // ---------- Bo'limlarni boshqarish ----------
 function bolimSheet() {
   const list = h('div', { class: 'log' });
-  const paint = () => list.replaceChildren(...K.bolimlar.map((b) => h('div', { class: 'item between' },
+  const paint = () => fill(list, ...K.bolimlar.map((b) => h('div', { class: 'item between' },
     h('span', { style: b.ota_id ? 'padding-left:18px' : '' }, bolimName(b.id), b.maxfiy ? ' 🔒' : ''),
     h('span', { class: 'row' },
       h('button', { class: 'btn ghost small', type: 'button', onclick: async () => {
@@ -408,7 +410,7 @@ export function Library() {
   const paint = () => {
     const tabs = [['hujjat', 'Hujjatlar'], ['kiruvchi', K.kiruvchi ? `Kiruvchi · ${K.kiruvchi}` : 'Kiruvchi'], ['havola', 'Havolalar'], ['ai', 'AI'], ['jurnal', 'Jurnal']];
     const body = { hujjat: DocsTab, kiruvchi: InboxTab, havola: LinksTab, ai: AiTab, jurnal: LogTab }[K.tab] || DocsTab;
-    view.replaceChildren(
+    fill(view, 
       Head('Hamma hujjatlar bitta joyda', 'Kutubxona', K.tab === 'hujjat' ? h('span', { class: 'row', style: 'gap:6px' },
         h('button', { class: 'btn ghost pill small', type: 'button', onclick: bolimSheet }, 'Bo\'limlar'),
         h('button', { class: 'btn pill small', type: 'button', onclick: addSheet }, '+ Hujjat')) : null),
@@ -430,7 +432,7 @@ export function LibraryDoc(id) {
   (async () => {
     if (!K.bolimlar.length) await loadBolimlar();
     const { data: d } = await sb.from('kutubxona_hujjatlar').select('*').eq('id', id).maybeSingle();
-    if (!d || d.deleted_at) { view.replaceChildren(BackHead('Hujjat', '#/kutubxona'), Empty('Hujjat topilmadi', 'U o\'chirilgan bo\'lishi mumkin.')); return; }
+    if (!d || d.deleted_at) { fill(view, BackHead('Hujjat', '#/kutubxona'), Empty('Hujjat topilmadi', 'U o\'chirilgan bo\'lishi mumkin.')); return; }
     const [{ data: vers }, { data: logs }] = await Promise.all([
       sb.from('kutubxona_versiyalar').select('*').eq('hujjat_id', id).order('versiya', { ascending: false }),
       sb.from('kutubxona_jurnal').select('*').eq('hujjat_id', id).order('qachon', { ascending: false }).limit(20)]);
@@ -447,7 +449,7 @@ export function LibraryDoc(id) {
     } });
     const text = String(d.matn || '');
     const pre = h('div', { style: 'white-space:pre-wrap;font-size:13px;line-height:1.5;max-height:340px;overflow:auto;background:var(--bg);border-radius:12px;padding:12px' }, text.slice(0, 6000) + (text.length > 6000 ? '\n\n…' : ''));
-    view.replaceChildren(
+    fill(view, 
       BackHead('Kutubxona', '#/kutubxona'),
       h('section', { class: 'card' },
         h('div', { class: 'between', style: 'align-items:flex-start' }, h('h1', { style: 'font-size:20px;margin:0' }, d.nom),

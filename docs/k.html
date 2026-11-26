@@ -150,7 +150,7 @@ h2{font-size:16px;margin:8px 4px 0}
     const info = S.info, L = info.havola;
     const sub = `${S.ism} · ${L.muddat ? 'havola ' + date(L.muddat) + ' gacha' : 'havola muddatsiz'}`;
     const kids = [head(sub)];
-    if (info.hujjat) { kids.push(docCard(info.hujjat)); app.replaceChildren(...kids); return; }
+    if (info.hujjat) { kids.push(docCard(info.hujjat)); app.replaceChildren(...kids.filter(Boolean)); return; }
     if (L.tur === 'qoshish' || L.tur === 'yuklash') kids.push(uploadBox());
     if (L.tur !== 'yuklash') {
       const box = h('div', { style: 'display:flex;flex-direction:column;gap:12px' });
@@ -159,9 +159,9 @@ h2{font-size:16px;margin:8px 4px 0}
       const tops = info.bolimlar.filter((b) => !b.ota_id || !info.bolimlar.some((x) => x.id === b.ota_id));
       const chip = (id, label) => h('button', { class: 'chip' + (S.bolim === id ? ' on' : ''), onclick: () => { S.bolim = id; render(); } }, label);
       kids.push(h('h2', {}, 'Hujjatlar'), inp, tops.length > 1 ? h('div', { class: 'chips' }, chip('', 'Hammasi'), tops.map((b) => chip(b.id, b.nom))) : null, box);
-      app.replaceChildren(...kids); list(box); return;
+      app.replaceChildren(...kids.filter(Boolean)); list(box); return;
     }
-    app.replaceChildren(...kids);
+    app.replaceChildren(...kids.filter(Boolean));
   }
 
   async function start() {
